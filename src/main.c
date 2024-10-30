@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "gpu_funcs.h"
 #include "gpu_util.h"
+#include "image_io.h"
 
 void cleanup(void);
 void GpuCleanup(void);
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
 	InitPinnedBuffers(IMG_WIDTH, IMG_HEIGHT);
 
 	// Write image data
+	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);
 
 	printf("Finished\n");
 	return 0;
