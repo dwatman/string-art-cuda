@@ -1,6 +1,7 @@
 #include <stdio.h>
-#include <stdlib.h> // for atexit()
+#include <stdlib.h> // for atexit(), rand()
 //#include <string.h>
+#include <time.h> // to init rand()
 
 #include "settings.h"
 #include "gpu_funcs.h"
@@ -38,18 +39,22 @@ int main(int argc, char* argv[]) {
 
 	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
 
+	srand(time(NULL));   // Initialise RNG
 
 	point_t p0, p1;
-	p0.x = 10;
-	p0.y = 5;
-	p1.x = 100;
-	p1.y = 50;
+	int i;
 
+	for (i=0; i<NUM_LINES; i++) {
+		p0.x = rand() % DATA_SIZE;
+		p0.y = rand() % DATA_SIZE;
+		p1.x = rand() % DATA_SIZE;
+		p1.y = rand() % DATA_SIZE;
 
-	lines[0] = pointsToLine(p0, p1);
+		lines[i] = pointsToLine(p0, p1);
 
-	printf("Line (%.2f, %.2f) - (%.2f, %.2f)", p0.x, p0.y, p1.x, p1.y);
-	printf(" -> %f %f %f (%f)\n", lines[0].A, lines[0].B, lines[0].C, lines[0].inv_denom);
+		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
+		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
+	}
 
 	GpuLoadLines(&gpuData, lines);
 

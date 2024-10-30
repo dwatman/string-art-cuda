@@ -62,7 +62,6 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	if (gpuData->imgOut != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgOut));
 }
 
-
 // Copy line data to GPU
 void GpuLoadLines(gpuData_t *gpuData, line_t *lines) {
 
@@ -80,35 +79,33 @@ __device__ float compute_distance(float x0, float y0, float A, float B, float C,
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData) {
 	float A, B, C, inv_denom;
-	float x, y, dist;
+	float dist;
 	float value;
-
-	// Get line parameters (format Ax + By + C = 0)
-	// The parameter 1/sqrt(A^2 + B^2) is also precalculated
-	A = lineData[0];
-	B = lineData[1];
-	C = lineData[2];
-	inv_denom = lineData[3];
+	int line;
 
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	x = i;
-	y = j;
 
 	if ((i<width) && (j<height)) {
-		dist = compute_distance(x, y, A, B, C, inv_denom);
+		value = 0.0f;
 
-		//if (dist < 1.0f) value = 0.7f;
-		//else value = 0.2f;
-		value = min(1.0f, max(0.0f, 1.5f - dist/2));
+		for (line=0; line<NUM_LINES; line++) {
+			// Get line parameters (format Ax + By + C = 0)
+			// The parameter 1/sqrt(A^2 + B^2) is also precalculated
+			A = lineData[4*line + 0];
+			B = lineData[4*line + 1];
+			C = lineData[4*line + 2];
+			inv_denom = lineData[4*line + 3];
+
+			dist = compute_distance(i, j, A, B, C, inv_denom);
+			value = max(value, min(1.0f, max(0.0f, 1.2f - dist/1.5)));
+		}
 
 		// Convert and store value into output array
 		if (value > 0.0f) dataDst[j*pitchDst + i] = value;
 	}
 }
-
-
 
 // Draw a line
 void GpuDrawLines(gpuData_t *gpuData) {
@@ -128,10 +125,6 @@ void GpuDrawLines(gpuData_t *gpuData) {
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
-
-
-
-
 
 // (GPU) Convert accumulator buffer to output format
 __global__
