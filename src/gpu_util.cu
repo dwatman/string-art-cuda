@@ -1,10 +1,11 @@
 #include <stdio.h>
 
 #include "gpu_util.h"
+#include "settings.h"
 
 // CPU memory buffers
-extern float *h_imageIn;
-extern float *h_imageOut;
+extern uint8_t *h_imageIn;
+extern uint8_t *h_imageOut;
 
 // GPU memory buffers
 extern gpuData_t gpuData;
@@ -86,24 +87,27 @@ void GpuUnPinMemory(void *ptr) {
 }
 
 // Initialise pinned host memory
-int InitPinnedBuffers(int width, int height) {
+int InitPinnedBuffers(void) {
 	printf("InitPinnedBuffers\n");
 	int err;
-	size_t size, sizeAligned;
+	size_t sizeIn, sizeOut, sizeAlignedIn, sizeAlignedOut;
 
 	// Use fixed 4096 byte alignment to match page size, as GPU pins whole pages (probably)
 	size_t alignment = 4096;
 
-	size = width * height * sizeof(float);
+	sizeIn  = IMG_WIDTH * IMG_HEIGHT * sizeof(uint8_t);
+	sizeOut = DATA_SIZE * DATA_SIZE * sizeof(uint8_t);
 
 	// Make sure the buffer is a multiple of the alignment size
-	sizeAligned = (((alignment-1) + size) / alignment) * alignment;
+	sizeAlignedIn  = (((alignment-1) + sizeIn) / alignment) * alignment;
+	sizeAlignedOut = (((alignment-1) + sizeOut) / alignment) * alignment;
 
-	printf("size: %lu (%lu aligned)\n", size, sizeAligned);
+	printf("size in:  %lu (%lu aligned)\n", sizeIn, sizeAlignedIn);
+	printf("size out: %lu (%lu aligned)\n", sizeOut, sizeAlignedOut);
 
 	// Allocate aligned memory on CPU
-	h_imageIn = 	(float*)aligned_alloc(alignment, sizeAligned);
-	h_imageOut = 	(float*)aligned_alloc(alignment, sizeAligned);
+	h_imageIn = 	(uint8_t*)aligned_alloc(alignment, sizeAlignedIn);
+	h_imageOut = 	(uint8_t*)aligned_alloc(alignment, sizeAlignedOut);
 
 	if ((h_imageIn == NULL) || (h_imageOut == NULL)) {
 		printf("Error in InitPinnedBuffers, could not allocate aligned buffer\n");
@@ -111,8 +115,8 @@ int InitPinnedBuffers(int width, int height) {
 	}
 
 	// Pin aligned memory for faster GPU access
-	GpuPinMemory(h_imageIn, sizeAligned);
-	GpuPinMemory(h_imageOut, sizeAligned);
+	GpuPinMemory(h_imageIn, sizeAlignedIn);
+	GpuPinMemory(h_imageOut, sizeAlignedOut);
 
 	printf("h_imageIn at    %p\n", h_imageIn);
 	printf("h_imageOut at   %p\n", h_imageOut);
@@ -144,3 +148,34 @@ void GpuSync(void) {
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
 
+// (CUDA) Fill buffer with a value
+__global__
+void fill_kernel(float *dataDst, size_t pitchDst, float value, int width, int height) {
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if ((i<width) && (j<height)) {
+		// Store value into output array
+		dataDst[j*pitchDst + i] = value;
+	}
+}
+
+// Set initial image stats
+void clearBuffers(gpuData_t *gpuData) {
+	int width = gpuData->dstSize;
+	int height = gpuData->dstSize;
+
+	// Threads per Block
+	const dim3 blockSize(16,16,1);
+
+	// Number of blocks
+	const dim3 gridSize(ceil(width/(float)blockSize.x),
+						ceil(height/(float)blockSize.y),
+						1);
+
+	// Set accumulator to black (grey for TEST)
+	fill_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), 0.5f, width, height);
+
+	//CUDA_CHECK(cudaMemset2DAsync(gpuData->imgOut, gpuData->pitchOutput, 0x10, width, height, gpuData->stream));
+	CUDA_CHECK(cudaDeviceSynchronize());
+}

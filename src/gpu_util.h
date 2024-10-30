@@ -23,9 +23,10 @@ cudaError_t cudaLastError(const char* const file, const int line);
 int  GpuInit(void);
 void GpuPinMemory(void *ptr, size_t size);
 void GpuUnPinMemory(void *ptr);
-int InitPinnedBuffers(int width, int height);
+int InitPinnedBuffers(void);
 void FreePinnedBuffers(void);
 void GpuSync(void);
+void clearBuffers(gpuData_t *gpuData);
 
 #ifdef __cplusplus
 }

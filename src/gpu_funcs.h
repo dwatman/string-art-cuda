@@ -14,11 +14,13 @@ typedef struct {
 	// Note: pitch is in bytes
 	size_t pitchInOrig;
 	size_t pitchInFloat;
+	size_t pitchAccum;
 	size_t pitchOutput;
 	// IMAGE BUFFERS
 	uint8_t  *imgInOrig;	// Input image data
 	float    *imgInFloat;	// Input image data as float
-	float    *imgOut;		// Output image
+	float    *imgAccum;		// Accumulated data
+	uint8_t  *imgOut;		// Output image
 } gpuData_t;
 
 // Fix to support both C and C++ compilers
@@ -28,6 +30,7 @@ extern "C" {
 
 int  GpuInitBuffers(gpuData_t *gpuData);
 void GpuFreeBuffers(gpuData_t *gpuData);
+void GpuOutConvert(uint8_t *hostDst, gpuData_t *gpuData);
 
 #ifdef __cplusplus
 }

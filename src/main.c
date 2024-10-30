@@ -11,8 +11,8 @@ void cleanup(void);
 void GpuCleanup(void);
 
 // CPU buffers
-float *h_imageIn = NULL;
-float *h_imageOut = NULL;
+uint8_t *h_imageIn = NULL;
+uint8_t *h_imageOut = NULL;
 
 // GPU buffers
 gpuData_t gpuData;
@@ -29,9 +29,15 @@ int main(int argc, char* argv[]) {
 
 	// Allocate global buffers
 	atexit(cleanup); // set cleanup function for CPU memory
-	InitPinnedBuffers(IMG_WIDTH, IMG_HEIGHT);
+	InitPinnedBuffers();
 
-	// Write image data
+	// Clear GPU buffers
+	clearBuffers(&gpuData);
+
+	// Convert data to int and write to CPU buffer
+	GpuOutConvert(h_imageOut, &gpuData);
+
+	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);
 
 	printf("Finished\n");
