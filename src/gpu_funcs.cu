@@ -99,7 +99,7 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 			inv_denom = lineData[4*line + 3];
 
 			dist = compute_distance(i, j, A, B, C, inv_denom);
-			value = max(value, min(1.0f, max(0.0f, 1.2f - dist/1.5)));
+			value = max(value, min(1.0f, max(0.0f, 1.2f - dist/1.5f)));
 		}
 
 		// Convert and store value into output array

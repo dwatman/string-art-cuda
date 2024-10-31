@@ -161,7 +161,7 @@ void fill_kernel(float *dataDst, size_t pitchDst, float value, int width, int he
 }
 
 // Set initial image stats
-void clearBuffers(gpuData_t *gpuData) {
+void ClearBuffers(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
 	int height = gpuData->dstSize;
 

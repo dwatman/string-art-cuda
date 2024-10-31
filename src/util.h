@@ -1,6 +1,7 @@
 #ifndef __UTIL_H__
 #define __UTIL_H__
 
+#include <stdlib.h>
 #include <math.h>
 
 // 2D point coordinate
@@ -18,6 +19,8 @@ typedef struct {
 	float inv_denom;
 } line_t;
 
-line_t pointsToLine(point_t p1, point_t p2);
+void InitNailPositions(point_t *nails, int numNails);
+int ValidateNextNail(int first, int next, int thresh);
+line_t PointsToLine(point_t p1, point_t p2);
 
 #endif

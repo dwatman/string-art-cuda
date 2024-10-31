@@ -1,6 +1,37 @@
 #include "util.h"
+#include "settings.h"
 
-line_t pointsToLine(point_t p1, point_t p2) {
+void InitNailPositions(point_t *nails, int numNails) {
+	float x, y;
+	float angle;
+	int i;
+
+	// Arrange nails in a circle
+	for (i=0; i<numNails; i++) {
+		angle = i*2*M_PI/numNails;
+
+		x = (1.0 + sin(angle)) * (DATA_SIZE-1)/2.0;
+		y = (1.0 + cos(angle)) * (DATA_SIZE-1)/2.0;
+
+		nails[i].x = x;
+		nails[i].y = y;
+	}
+}
+
+int ValidateNextNail(int first, int next, int thresh) {
+	int diff_direct, diff_wrap, diff_min;
+
+	diff_direct = abs(next - first);
+	diff_wrap = NUM_NAILS - diff_direct;
+	diff_min = diff_direct < diff_wrap ? diff_direct : diff_wrap;
+
+	if (diff_min <= thresh)
+		return 0;
+	else
+		return 1;
+}
+
+line_t PointsToLine(point_t p1, point_t p2) {
 	line_t line;
 
 	// Calculate coefficients A, B, and C

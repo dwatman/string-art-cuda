@@ -26,7 +26,7 @@ void GpuUnPinMemory(void *ptr);
 int InitPinnedBuffers(void);
 void FreePinnedBuffers(void);
 void GpuSync(void);
-void clearBuffers(gpuData_t *gpuData);
+void ClearBuffers(gpuData_t *gpuData);
 
 #ifdef __cplusplus
 }

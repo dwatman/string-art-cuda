@@ -2,6 +2,7 @@
 #include <stdlib.h> // for atexit(), rand()
 //#include <string.h>
 #include <time.h> // to init rand()
+#include <math.h> // for abs
 
 #include "settings.h"
 #include "gpu_funcs.h"
@@ -11,6 +12,9 @@
 
 void cleanup(void);
 void GpuCleanup(void);
+
+point_t nails[NUM_NAILS];
+int pointList[NUM_LINES+1];
 
 // CPU buffers
 uint8_t *h_imageIn = NULL;
@@ -22,6 +26,7 @@ gpuData_t gpuData;
 
 int main(int argc, char* argv[]) {
 	int err;
+	int i;
 
 	printf("Start\n");
 
@@ -35,25 +40,46 @@ int main(int argc, char* argv[]) {
 	InitPinnedBuffers();
 
 	// Clear GPU buffers
-	clearBuffers(&gpuData);
+	ClearBuffers(&gpuData);
 
 	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
+
+
+	InitNailPositions(nails, NUM_NAILS);
+
+/*
+	for (i=0; i<NUM_NAILS; i++) {
+		printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
+	}
+*/
 
 	srand(time(NULL));   // Initialise RNG
 
 	point_t p0, p1;
-	int i;
+	int n0, n1;
+
+	// First nail
+	pointList[0] = rand() % NUM_NAILS;
 
 	for (i=0; i<NUM_LINES; i++) {
-		p0.x = rand() % DATA_SIZE;
-		p0.y = rand() % DATA_SIZE;
-		p1.x = rand() % DATA_SIZE;
-		p1.y = rand() % DATA_SIZE;
+		// Select next nail
+		do {
+			pointList[i+1] = rand() % NUM_NAILS;
+		} while (ValidateNextNail(pointList[i], pointList[i+1], MIN_DIST) == 0);
 
-		lines[i] = pointsToLine(p0, p1);
+		p0.x = nails[pointList[i]].x;
+		p0.y = nails[pointList[i]].y;
+		p1.x = nails[pointList[i+1]].x;
+		p1.y = nails[pointList[i+1]].y;
+		lines[i] = PointsToLine(p0, p1);
 
+		//printf("Nail %3u to %3u\n", pointList[i], pointList[i+1]);
 		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
 		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
+	}
+
+	for (i=0; i<=NUM_LINES; i++) {
+		printf("Point %3u = %3u\n", i, pointList[i]);
 	}
 
 	GpuLoadLines(&gpuData, lines);
