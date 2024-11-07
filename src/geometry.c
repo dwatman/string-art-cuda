@@ -9,7 +9,7 @@ typedef struct {
 } Point;
 
 // Global variable to store the centroid for sorting
-Point centroid;
+static Point centroid;
 
 // Helper function to check if a point is within square bounds
 int in_square_bounds(double x, double y) {
@@ -134,7 +134,8 @@ void find_square_corner(Point *points, int *count) {
 	points[(*count)++] = corner;
 }
 
-double compute_area_fraction(double A, double B, double C, double t) {
+// Calculate the area of a unit square covered by a line
+double line_area_fraction(double A, double B, double C, double t) {
 	// Maximum number of intersections possible is 8
 	Point intersections[8];
 
@@ -160,4 +161,18 @@ printf("%i intersections\n", count);
 printf("area = %f\n", area);
 	// Area fraction is the polygon area divided by the unit square area (1x1 square)
 	return area;
+}
+
+// Check if a point is inside a polygon
+// From https://wrfranklin.org/Research/Short_Notes/pnpoly.html
+int inside_poly(point_t *vert, int nvert, float testx, float testy) {
+	int i, j, inside = 0;
+
+	for (i = 0, j = nvert-1; i < nvert; j = i++) {
+		if ( ((vert[i].y>testy) != (vert[j].y>testy)) &&
+		(testx < (vert[j].x-vert[i].x) * (testy-vert[i].y) / (vert[j].y-vert[i].y) + vert[i].x) )
+			inside = !inside;
+	}
+
+	return inside;
 }
