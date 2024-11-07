@@ -10,6 +10,11 @@ typedef struct {
 	float y;
 } point_t;
 
+typedef struct {
+	double x;
+	double y;
+} pointd_t;
+
 // Coefficients for a line in Ax + By + C = 0 format
 // The parameter 1/sqrt(A^2 + B^2) is also stored for efficiency
 typedef struct {
@@ -22,5 +27,6 @@ typedef struct {
 void InitNailPositions(point_t *nails, int numNails);
 int ValidateNextNail(int first, int next, int thresh);
 line_t PointsToLine(point_t p1, point_t p2);
+line_t DistAngleToLine(float dist, float angle);
 
 #endif
