@@ -12,6 +12,12 @@ int in_square_bounds(double x, double y) {
 	return (x >= -0.5 && x <= 0.5 && y >= -0.5 && y <= 0.5);
 }
 
+// Check if a point (x, y) is within the thick line region
+int point_in_thick_line(double A, double B, double C, double t, double x, double y) {
+	double distance = fabs(A * x + B * y + C) / sqrt(A * A + B * B);
+	return distance <= t / 2;
+}
+
 // Check intersection of a line with each edge of the square
 void line_square_intersections(double A, double B, double C, pointd_t *intersections, int *count) {
 	*count = 0;  // Reset count at the start
@@ -59,15 +65,15 @@ int find_intersections(double A, double B, double C, float t, pointd_t *intersec
 	int current_count;
 	line_square_intersections(A, B, C1, intersections, &current_count);
 	count += current_count;
-	//printf("count1 (C1 = %+.3f) %i\n", C1, current_count);
+	// printf("count1 (C1 = %+.3f) %i\n", C1, current_count);
 
 	line_square_intersections(A, B, C2, intersections + count, &current_count);
 	count += current_count;
-	//printf("count2 (C2 = %+.3f) %i\n", C2, current_count);
+	// printf("count2 (C2 = %+.3f) %i\n", C2, current_count);
 
-	//int i;
-	//for (i=0; i<count; i++)
-	//	printf("    point %i: %+6.4f, %+6.4f\n", i, intersections[i].x, intersections[i].y);
+	// int i;
+	// for (i=0; i<count; i++)
+	// 	printf("    point %i: %+6.4f, %+6.4f\n", i, intersections[i].x, intersections[i].y);
 
 	return count;
 }
@@ -134,14 +140,24 @@ float line_area_fraction(line_t line, float t) {
 	int count = find_intersections(line.A, line.B, line.C, t, intersections);
 	//printf("%i intersections\n", count);
 
-	// If fewer than 2 intersections, no area is covered
-	if (count < 2) {
-		return 0.0;
+	// Check each corner of the square
+	pointd_t corners[4] = {
+		{-0.5, -0.5},
+		{0.5, -0.5},
+		{0.5, 0.5},
+		{-0.5, 0.5}
+	};
+	int corners_in_line = 0;
+	for (int i = 0; i < 4; i++) {
+		if (point_in_thick_line(line.A, line.B, line.C, t, corners[i].x, corners[i].y)) {
+			intersections[count++] = corners[i];  // Include corner in polygon
+			corners_in_line++;
+		}
 	}
 
-	// If exactly 2 intersections, add the square corner to form a triangle
-	if (count == 2) {
-		find_square_corner(intersections, &count);  // Find the correct corner
+	// If all four corners are within the thick line, the area is the entire square
+	if (corners_in_line == 4) {
+		return 1.0f;
 	}
 
 	// Sort points in counterclockwise order to form a polygon
