@@ -78,9 +78,9 @@ int main(int argc, char* argv[]) {
 		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
 	}
 
-	for (i=0; i<=NUM_LINES; i++) {
+	/*for (i=0; i<=NUM_LINES; i++) {
 		printf("Point %3u = %3u\n", i, pointList[i]);
-	}
+	}*/
 
 	GpuLoadLines(&gpuData, lines);
 

@@ -10,8 +10,8 @@ void InitNailPositions(point_t *nails, int numNails) {
 	for (i=0; i<numNails; i++) {
 		angle = i*2*M_PI/numNails;
 
-		x = (1.0 + sin(angle)) * (DATA_SIZE-1)/2.0;
-		y = (1.0 + cos(angle)) * (DATA_SIZE-1)/2.0;
+		x = (1.0 + cos(angle)) * (DATA_SIZE-1)/2.0;
+		y = (1.0 - sin(angle)) * (DATA_SIZE-1)/2.0;
 
 		nails[i].x = x;
 		nails[i].y = y;
