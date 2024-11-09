@@ -6,6 +6,7 @@
 // CPU memory buffers
 extern uint8_t *h_imageIn;
 extern uint8_t *h_imageOut;
+extern float   *h_lineCoverage;
 
 // GPU memory buffers
 extern gpuData_t gpuData;
@@ -86,44 +87,45 @@ void GpuUnPinMemory(void *ptr) {
 	CUDA_CHECK(cudaHostUnregister(ptr));
 }
 
-// Initialise pinned host memory
-int InitPinnedBuffers(void) {
-	printf("InitPinnedBuffers\n");
-	int err;
-	size_t sizeIn, sizeOut, sizeAlignedIn, sizeAlignedOut;
+// Allocate aligned memory on CPU and pin it for fast GPU access
+int AllocAndAlignPinned(void **buf, size_t size) {
+	size_t sizeAligned;
 
 	// Use fixed 4096 byte alignment to match page size, as GPU pins whole pages (probably)
 	size_t alignment = 4096;
 
-	sizeIn  = IMG_WIDTH * IMG_HEIGHT * sizeof(uint8_t);
-	sizeOut = DATA_SIZE * DATA_SIZE * sizeof(uint8_t);
-
 	// Make sure the buffer is a multiple of the alignment size
-	sizeAlignedIn  = (((alignment-1) + sizeIn) / alignment) * alignment;
-	sizeAlignedOut = (((alignment-1) + sizeOut) / alignment) * alignment;
+	sizeAligned  = (((alignment-1) + size) / alignment) * alignment;
 
-	printf("size in:  %lu (%lu aligned)\n", sizeIn, sizeAlignedIn);
-	printf("size out: %lu (%lu aligned)\n", sizeOut, sizeAlignedOut);
+	//printf("size:  %lu (%lu aligned)\n", size, sizeAligned);
 
 	// Allocate aligned memory on CPU
-	h_imageIn = 	(uint8_t*)aligned_alloc(alignment, sizeAlignedIn);
-	h_imageOut = 	(uint8_t*)aligned_alloc(alignment, sizeAlignedOut);
+	*buf = aligned_alloc(alignment, sizeAligned);
 
-	if ((h_imageIn == NULL) || (h_imageOut == NULL)) {
-		printf("Error in InitPinnedBuffers, could not allocate aligned buffer\n");
+	if (*buf == NULL) {
+		printf("Error in AllocAndAlignPinned, could not allocate aligned buffer\n");
 		return -1;
 	}
 
 	// Pin aligned memory for faster GPU access
-	GpuPinMemory(h_imageIn, sizeAlignedIn);
-	GpuPinMemory(h_imageOut, sizeAlignedOut);
+	GpuPinMemory(*buf, sizeAligned);
 
-	printf("h_imageIn at    %p\n", h_imageIn);
-	printf("h_imageOut at   %p\n", h_imageOut);
+	return CUDA_LAST_ERROR();
+}
 
-	err = CUDA_LAST_ERROR();
+// Initialise pinned host memory
+int InitPinnedBuffers(void) {
+	printf("InitPinnedBuffers\n");
 
-	return err;
+	AllocAndAlignPinned((void **)&h_imageIn, IMG_WIDTH * IMG_HEIGHT * sizeof(uint8_t));
+	AllocAndAlignPinned((void **)&h_imageOut, DATA_SIZE * DATA_SIZE * sizeof(uint8_t));
+	AllocAndAlignPinned((void **)&h_lineCoverage, LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES * sizeof(float));
+
+	printf("h_imageIn at      %p\n", h_imageIn);
+	printf("h_imageOut at     %p\n", h_imageOut);
+	printf("h_lineCoverage at %p\n", h_lineCoverage);
+
+	return CUDA_LAST_ERROR();
 }
 
 // Free pinned host memory
@@ -138,6 +140,11 @@ void FreePinnedBuffers(void) {
 	if (h_imageOut != NULL) {
 		GpuUnPinMemory(h_imageOut);
 		free(h_imageOut);
+	}
+
+	if (h_lineCoverage != NULL) {
+		GpuUnPinMemory(h_lineCoverage);
+		free(h_lineCoverage);
 	}
 }
 

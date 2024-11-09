@@ -19,6 +19,7 @@ int pointList[NUM_LINES+1];
 // CPU buffers
 uint8_t *h_imageIn = NULL;
 uint8_t *h_imageOut = NULL;
+float   *h_lineCoverage = NULL;
 line_t *lines = NULL;
 
 // GPU buffers

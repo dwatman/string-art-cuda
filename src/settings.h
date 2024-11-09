@@ -5,6 +5,10 @@
 #define NUM_LINES 1000
 #define MIN_DIST 2
 
+// For line coverage lookup texture
+#define LINE_TEX_ANGLE_SAMPLES 128
+#define LINE_TEX_DIST_SAMPLES 256
+
 // Output size (square for now)
 #define DATA_SIZE 1024
 
