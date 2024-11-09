@@ -9,6 +9,7 @@
 #include "gpu_util.h"
 #include "image_io.h"
 #include "util.h"
+#include "geometry.h"
 
 void cleanup(void);
 void GpuCleanup(void);
@@ -53,6 +54,8 @@ int main(int argc, char* argv[]) {
 		printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
 	}
 */
+
+	CalcLineCoverage(h_lineCoverage, 0.2);
 
 	srand(time(NULL));   // Initialise RNG
 

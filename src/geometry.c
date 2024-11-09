@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "geometry.h"
+#include "settings.h"
 
 // Global variable to store the centroid for sorting
 static pointd_t centroid;
@@ -182,4 +183,38 @@ int inside_poly(point_t *vert, int nvert, float testx, float testy) {
 	}
 
 	return inside;
+}
+
+// Calculate the coverage of a line over a unit square at various angles and distances
+void CalcLineCoverage(float *map, float lineWidth) {
+	int i, j;
+	float angle, dist, area, maxval;
+	line_t line;
+
+	float maxAngle = 2*M_PI;
+	float maxDist = sqrt(2)/2 + lineWidth/2;
+
+	if (map == NULL) {
+		printf("ERROR in CalcLineCoverage, map not initialised\n");
+		return;
+	}
+
+	maxval = 0;
+	for (j=0; j<LINE_TEX_DIST_SAMPLES; j++) {
+		for (i=0; i<LINE_TEX_ANGLE_SAMPLES; i++) {
+			angle = ((float)i/LINE_TEX_ANGLE_SAMPLES)*maxAngle;
+			dist = ((float)j/LINE_TEX_DIST_SAMPLES)*maxDist;
+
+			//printf("d %f, a %f\n", dist, angle);
+			line = DistAngleToLine(dist, angle);
+			area = line_area_fraction(line, lineWidth);
+
+			// Keep track of the maximum value
+			if (area > maxval) maxval = area;
+
+			map[LINE_TEX_ANGLE_SAMPLES*j + i] = area;
+		}
+	}
+	printf("maxval %f\n", maxval);
+
 }
