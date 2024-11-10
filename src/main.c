@@ -76,6 +76,8 @@ int main(int argc, char* argv[]) {
 
 	CalcLineCoverage(h_lineCoverage, 0.2);
 
+	ResetConnections();
+
 	srand(time(NULL));   // Initialise RNG
 
 	point_t p0, p1;
@@ -84,11 +86,27 @@ int main(int argc, char* argv[]) {
 	// First nail
 	pointList[0] = rand() % NUM_NAILS;
 
+	// Create lines
 	for (i=0; i<NUM_LINES; i++) {
+		int retries = 0;
+
 		// Select next nail
-		do {
+		pointList[i+1] = rand() % NUM_NAILS;
+
+		// If the selected nail is not valid (too close, already connected)
+		// Choose another until the limit is reached or a suitable nail is found
+		while ((retries < RETRY_LIMIT) && (ValidateNextNail(pointList[i], pointList[i+1], MIN_LINE_DIST) == 0)) {
+			retries++;
 			pointList[i+1] = rand() % NUM_NAILS;
-		} while (ValidateNextNail(pointList[i], pointList[i+1], MIN_LINE_DIST) == 0);
+			//printf("Retry %u: %u -> %u\n", retries, pointList[i], pointList[i+1]);
+		}
+
+		if (retries == RETRY_LIMIT) {
+			printf("ERROR: Retry limit reached for line %u\n", i);
+			break;
+		}
+
+		SetConnection(pointList[i], pointList[i+1]);
 
 		p0.x = nails[pointList[i]].x;
 		p0.y = nails[pointList[i]].y;
@@ -101,9 +119,30 @@ int main(int argc, char* argv[]) {
 		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
 	}
 
-	/*for (i=0; i<=NUM_LINES; i++) {
-		printf("Point %3u = %3u\n", i, pointList[i]);
-	}*/
+	// Check if lines were unable to be completed
+	if (i < NUM_LINES) {
+		printf("ERROR: Unable to initialise all lines\n");
+		return -1;
+	}
+
+	// for (i=0; i<=NUM_LINES; i++) {
+	// 	printf("Point %3u = %3u\n", i, pointList[i]);
+	// }
+
+	// Display connection matrix
+	int j;
+	for (j=0; j<NUM_NAILS; j++) {
+		printf("%3u ", j);
+		for (i=0; i<NUM_NAILS; i++) {
+			if (i==j)
+				printf("\\");
+			else if (IsConnected(i, j))
+				printf("X");
+			else
+				printf(" ");
+		}
+		printf("\n");
+	}
 
 	GpuLoadLines(&gpuData, lines);
 

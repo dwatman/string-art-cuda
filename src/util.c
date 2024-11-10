@@ -30,7 +30,7 @@ int ValidateNextNail(int first, int next, int thresh) {
 	diff_wrap = NUM_NAILS - diff_direct;
 	diff_min = diff_direct < diff_wrap ? diff_direct : diff_wrap;
 
-	if (diff_min <= thresh)
+	if ((diff_min <= thresh) || IsConnected(first, next))
 		return 0;
 	else
 		return 1;
@@ -71,14 +71,40 @@ static inline int get_bit_index(int i, int j) {
 	return i * NUM_NAILS + j;
 }
 
-void SetConnection(int i, int j) {
-	int bit_index_ij = get_bit_index(i, j);
-	int bit_index_ji = get_bit_index(j, i);
-	connections[bit_index_ij / 64] |= (1ULL << (bit_index_ij % 64));
-	connections[bit_index_ji / 64] |= (1ULL << (bit_index_ji % 64));
+// Clear all recorded connections, and preset invalid links
+void ResetConnections(void) {
+	int i;
+
+	// Clear all connections
+	for (i=0; i<LINE_BIT_ARRAY_SIZE; i++)
+		connections[i] = 0;
+
+	// Set points as connected to themselves
+	for (i=0; i<NUM_NAILS; i++)
+		SetConnection(i, i);
 }
 
+// Mark a connection (in both directions)
+void SetConnection(int i, int j) {
+	// Prevent out of array access
+	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
+		return;
+
+	int bit_index = get_bit_index(i, j);
+	connections[bit_index / 64] |= ((uint64_t)1 << (bit_index % 64));
+
+	if (i != j) { // For non-diagonal entries, set the reverse as well
+		bit_index = get_bit_index(j, i);
+		connections[bit_index / 64] |= ((uint64_t)1 << (bit_index % 64));
+	}
+}
+
+// Check if two nails are connected
 int IsConnected(int i, int j) {
-	int bit_index_ij = get_bit_index(i, j);
-	return connections[bit_index_ij / 64] & (1ULL << (bit_index_ij % 64));
+	// Prevent out of array access
+	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
+		return 1; // Say out of range points are connected
+
+	int bit_index = get_bit_index(i, j);
+	return (connections[bit_index / 64] & ((uint64_t)1 << (bit_index % 64))) ? 1 : 0;
 }

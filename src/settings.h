@@ -6,6 +6,7 @@
 #define NUM_LINES 100
 
 #define MIN_LINE_DIST 2 // Minimum interval between nails that a line is allowed
+#define RETRY_LIMIT 10 // How many times to retry selecting the next valid nail
 
 // Array to track connections and prevent lines repeating the same path
 #define LINE_BIT_ARRAY_SIZE ((NUM_NAILS * NUM_NAILS) / 64 + 1) // Number of uint64_t elements needed
