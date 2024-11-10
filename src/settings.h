@@ -7,6 +7,9 @@
 
 #define MIN_LINE_DIST 2 // Minimum interval between nails that a line is allowed
 
+// Array to track connections and prevent lines repeating the same path
+#define LINE_BIT_ARRAY_SIZE ((NUM_NAILS * NUM_NAILS) / 64 + 1) // Number of uint64_t elements needed
+
 // For line coverage lookup texture
 #define LINE_TEX_ANGLE_SAMPLES 256
 #define LINE_TEX_DIST_SAMPLES 256

@@ -1,5 +1,10 @@
+#include <stdint.h> // for uint64_t
+
 #include "util.h"
 #include "settings.h"
+
+// Bit array to track which nails are connected by lines
+static uint64_t connections[LINE_BIT_ARRAY_SIZE] = {0};
 
 void InitNailPositions(point_t *nails, int numNails) {
 	float x, y;
@@ -59,4 +64,21 @@ line_t DistAngleToLine(float dist, float angle) {
 	line.inv_denom = 1.0f / sqrtf(line.A*line.A + line.B*line.B);
 
 	return line;
+}
+
+// Caclulate bit index in connections array
+static inline int get_bit_index(int i, int j) {
+	return i * NUM_NAILS + j;
+}
+
+void SetConnection(int i, int j) {
+	int bit_index_ij = get_bit_index(i, j);
+	int bit_index_ji = get_bit_index(j, i);
+	connections[bit_index_ij / 64] |= (1ULL << (bit_index_ij % 64));
+	connections[bit_index_ji / 64] |= (1ULL << (bit_index_ji % 64));
+}
+
+int IsConnected(int i, int j) {
+	int bit_index_ij = get_bit_index(i, j);
+	return connections[bit_index_ij / 64] & (1ULL << (bit_index_ij % 64));
 }
