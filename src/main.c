@@ -29,11 +29,29 @@ gpuData_t gpuData;
 int main(int argc, char* argv[]) {
 	int err;
 	int i;
+	float lineRatio;
 
 	printf("Start\n");
 
 	// Initialise GPU device and buffers
 	GpuInit(); // Set up CUDA device
+
+	printf("Running with %u points, %u lines\n", NUM_NAILS, NUM_LINES);
+
+	// Check how the number of lines compares to the max possible unique connections
+	lineRatio = (float)NUM_LINES/((NUM_NAILS-1)*NUM_NAILS/2);
+	printf("Line ratio is %.2f%% of maximum connections\n\n", lineRatio*100);
+
+	if (lineRatio >= 1.0f) {
+		printf("ERROR: Number of lines exceeds the number of possible connections (%u)\n", (NUM_NAILS-1)*NUM_NAILS/2);
+		return -1;
+	}
+	else if (lineRatio > 0.25) {
+		printf("WARNING: Number of lines exceeds 25%% of all possible connections\n");
+		printf("    Recommend reducing the number of lines to below %u\n", (NUM_NAILS-1)*NUM_NAILS/2/4);
+	}
+	printf("\n");
+
 	atexit(GpuCleanup); // set cleanup function for GPU memory
 	GpuInitBuffers(&gpuData); // Initialise GPU buffers
 
@@ -44,6 +62,7 @@ int main(int argc, char* argv[]) {
 	// Clear GPU buffers
 	ClearBuffers(&gpuData);
 
+	// Allocate CPU buffers
 	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
 
 
@@ -69,7 +88,7 @@ int main(int argc, char* argv[]) {
 		// Select next nail
 		do {
 			pointList[i+1] = rand() % NUM_NAILS;
-		} while (ValidateNextNail(pointList[i], pointList[i+1], MIN_DIST) == 0);
+		} while (ValidateNextNail(pointList[i], pointList[i+1], MIN_LINE_DIST) == 0);
 
 		p0.x = nails[pointList[i]].x;
 		p0.y = nails[pointList[i]].y;
