@@ -4,6 +4,7 @@
 
 #include "image_io.h"
 
+// Write 8 or 16 bit greyscale data to a PNG file
 int write_png(const char *filename, unsigned char *buffer, int width, int height, int bit_depth) {
 	FILE *fp = fopen(filename, "wb");
 	if (!fp) {

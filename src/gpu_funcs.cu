@@ -84,7 +84,7 @@ __device__ float compute_distance(float x0, float y0, float A, float B, float C,
 	return numerator * inv_denom;  // Multiply instead of divide
 }
 
-// (GPU) Draw a line
+// (GPU) Draw many lines
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData) {
 	float A, B, C, inv_denom;
@@ -117,6 +117,7 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 }
 
 // Draw a line
+// Draw many lines
 void GpuDrawLines(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
 	int height = gpuData->dstSize;

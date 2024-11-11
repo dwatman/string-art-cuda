@@ -6,6 +6,7 @@
 // Bit array to track which nails are connected by lines
 static uint64_t connections[LINE_BIT_ARRAY_SIZE] = {0};
 
+// Initialise nail positions in a cirlce (for now)
 void InitNailPositions(point_t *nails, int numNails) {
 	float x, y;
 	float angle;
@@ -23,6 +24,8 @@ void InitNailPositions(point_t *nails, int numNails) {
 	}
 }
 
+// Check if the next proposed nail position is valid
+// Prevents short connections and repeated lines
 int ValidateNextNail(int first, int next, int thresh) {
 	int diff_direct, diff_wrap, diff_min;
 
@@ -45,7 +48,7 @@ line_t PointsToLine(point_t p1, point_t p2) {
 	line.B = p1.x - p2.x;
 	line.C = (p1.y * p2.x) - (p2.y * p1.x);
 
-	// Calculate 1/sqrt(A^2 + B^2) for efficiency
+	// Calculate 1/sqrt(A^2 + B^2) for later efficient use
 	line.inv_denom = 1.0f / sqrtf(line.A*line.A + line.B*line.B);
 
 	return line;

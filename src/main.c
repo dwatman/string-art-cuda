@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 	// Allocate CPU buffers
 	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
 
-
+	// Set nail positions in a circle (for now)
 	InitNailPositions(nails, NUM_NAILS);
 
 /*
@@ -74,6 +74,7 @@ int main(int argc, char* argv[]) {
 	}
 */
 
+	// Calculate the coverage of lines over pixels
 	CalcLineCoverage(h_lineCoverage, 0.2);
 
 	// Copy the coverage data to GPU memory
@@ -84,6 +85,7 @@ int main(int argc, char* argv[]) {
 
 	// Reset the map of line connections between nails
 	ResetConnections();
+
 
 	srand(time(NULL));   // Initialise RNG
 
@@ -151,11 +153,13 @@ int main(int argc, char* argv[]) {
 		printf("\n");
 	}
 
+	// Copy line data to GPU memory
 	GpuLoadLines(&gpuData, lines);
 
+	// Draw the set of lines in the GPU image buffer
 	GpuDrawLines(&gpuData);
 
-	// Convert data to int and write to CPU buffer
+	// Convert the image to uint and write to CPU buffer
 	GpuOutConvert(h_imageOut, &gpuData);
 
 	// Clear areas outside the border of nails
