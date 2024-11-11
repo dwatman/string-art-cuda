@@ -148,6 +148,42 @@ void FreePinnedBuffers(void) {
 	}
 }
 
+// Create a bindless texture for line coverage data
+void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch) {
+	cudaResourceDesc texRes;
+	cudaTextureDesc texDescr;
+
+	// Clear resource descriptors
+	memset(&texRes, 0, sizeof(cudaResourceDesc));
+	memset(&texDescr, 0, sizeof(cudaTextureDesc));
+
+	// Set up the 2D texture parameters
+	texRes.resType = cudaResourceTypePitch2D;
+	texRes.res.pitch2D.devPtr = (void *)data;
+	texRes.res.pitch2D.desc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+	texRes.res.pitch2D.width = LINE_TEX_ANGLE_SAMPLES;
+	texRes.res.pitch2D.height = LINE_TEX_DIST_SAMPLES;
+	texRes.res.pitch2D.pitchInBytes = pitch;
+
+	// Set up the way the texture is accessed
+	texDescr.normalizedCoords = 1;
+	texDescr.filterMode = cudaFilterModeLinear;
+	texDescr.addressMode[0] = cudaAddressModeClamp;
+	texDescr.addressMode[1] = cudaAddressModeClamp;
+	texDescr.readMode = cudaReadModeElementType;
+
+	CUDA_CHECK(cudaCreateTextureObject(tex, &texRes, &texDescr, NULL));
+}
+
+// Copy line coverage data to GPU
+void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData) {
+	CUDA_CHECK(cudaMemcpy2DAsync(
+		deviceData->lineCoverage, deviceData->pitchCoverage,
+		hostData, LINE_TEX_ANGLE_SAMPLES*sizeof(float),
+		LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES,
+		cudaMemcpyHostToDevice, deviceData->stream));
+}
+
 // Wait for GPU to finish before accessing on host
 void GpuSync(void) {
 	cudaDeviceSynchronize();

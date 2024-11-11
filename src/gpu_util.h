@@ -25,6 +25,8 @@ void GpuPinMemory(void *ptr, size_t size);
 void GpuUnPinMemory(void *ptr);
 int InitPinnedBuffers(void);
 void FreePinnedBuffers(void);
+void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch);
+void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData);
 void GpuSync(void);
 void ClearBuffers(gpuData_t *gpuData);
 

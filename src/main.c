@@ -76,6 +76,13 @@ int main(int argc, char* argv[]) {
 
 	CalcLineCoverage(h_lineCoverage, 0.2);
 
+	// Copy the coverage data to GPU memory
+	GpuUpdateCoverage(&gpuData, h_lineCoverage);
+
+	// Map the coverage data to a texture for fast lookup
+	InitCoverageTexture(&gpuData.texCoverage, gpuData.lineCoverage, gpuData.pitchCoverage);
+
+	// Reset the map of line connections between nails
 	ResetConnections();
 
 	srand(time(NULL));   // Initialise RNG

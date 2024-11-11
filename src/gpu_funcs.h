@@ -12,7 +12,12 @@ typedef struct {
 	int srcHeight;					// Source image data height
 	int dstSize;					// Output image size (square)
 	cudaStream_t stream;			// CUDA stream for processing
+	// LINE DATA
 	float *lineData;				// Line data (4 floats per line)
+	// LINE COVERAGE DATA
+	float *lineCoverage;			// Precalculated coverage of pixels vs distance/angle
+	size_t pitchCoverage;			// Pitch in bytes
+	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
 	// PITCH FOR IMAGE BUFFERS
 	// Note: pitch is in bytes
 	size_t pitchInOrig;

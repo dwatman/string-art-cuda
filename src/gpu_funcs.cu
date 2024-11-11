@@ -43,6 +43,12 @@ int GpuInitBuffers(gpuData_t *gpuData) {
 	printf("pitch Accum:   %5lu (%lu) at %p\n", gpuData->pitchAccum, 	gpuData->srcWidth*sizeof(float), gpuData->imgAccum);
 	printf("pitch output:  %5lu (%lu) at %p\n", gpuData->pitchOutput, 	gpuData->srcWidth*sizeof(uint8_t), gpuData->imgOut);
 
+	// Memory for 2D texture
+	CUDA_CHECK(cudaMallocPitch(&gpuData->lineCoverage, &gpuData->pitchCoverage,
+							LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES));
+
+	printf("pitch lineCoverage: %5lu (%lu) at %p\n", gpuData->pitchCoverage, LINE_TEX_ANGLE_SAMPLES*sizeof(float), gpuData->lineCoverage);
+
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	return CUDA_LAST_ERROR();
@@ -53,13 +59,16 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	printf("GpuFreeBuffers\n");
 
 	CUDA_CHECK(cudaStreamDestroy(gpuData->stream));
+	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texCoverage));
 
 	// Free GPU memory
-	if (gpuData->lineData != NULL) 		CUDA_CHECK(cudaFree(gpuData->lineData));
 	if (gpuData->imgInOrig != NULL) 	CUDA_CHECK(cudaFree(gpuData->imgInOrig));
 	if (gpuData->imgInFloat != NULL) 	CUDA_CHECK(cudaFree(gpuData->imgInFloat));
 	if (gpuData->imgAccum != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgAccum));
 	if (gpuData->imgOut != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgOut));
+
+	if (gpuData->lineData != NULL) 		CUDA_CHECK(cudaFree(gpuData->lineData));
+	if (gpuData->lineCoverage != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineCoverage));
 }
 
 // Copy line data to GPU
