@@ -151,6 +151,14 @@ int main(int argc, char* argv[]) {
 	// Convert data to int and write to CPU buffer
 	GpuOutConvert(h_imageOut, &gpuData);
 
+	// Clear areas outside the border of nails
+	for (j=0; j<DATA_SIZE; j++) {
+		for (i=0; i<DATA_SIZE; i++) {
+			if (inside_poly(nails, NUM_NAILS, i, j) == 0)
+				h_imageOut[j*DATA_SIZE + i] = 128;
+		}
+	}
+
 	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);
 
