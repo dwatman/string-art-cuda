@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 */
 
 	// Calculate the coverage of lines over pixels
-	CalcLineCoverage(h_lineCoverage, 0.2);
+	CalcLineCoverage(h_lineCoverage, STRING_THICKNESS);
 
 	// Copy the coverage data to GPU memory
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);

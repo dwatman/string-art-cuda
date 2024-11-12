@@ -186,12 +186,14 @@ int inside_poly(point_t *vert, int nvert, float testx, float testy) {
 }
 
 // Calculate the coverage of a line over a unit square at various angles and distances
+// X axis represents the angle between 0 and pi
+// Y axis represents the distance from the centre of the pixel to the corner distance + thickness/2
 void CalcLineCoverage(float *map, float lineWidth) {
 	int i, j;
 	float angle, dist, area, maxval;
 	line_t line;
 
-	float maxAngle = 2*M_PI;
+	float maxAngle = M_PI;
 	float maxDist = sqrt(2)/2 + lineWidth/2;
 
 	if (map == NULL) {

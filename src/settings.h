@@ -5,6 +5,10 @@
 #define NUM_NAILS 24
 #define NUM_LINES 100
 
+// String parameters
+#define STRING_THICKNESS 0.2f // Thickness of the string in pixels (float)
+
+// Settings for finding the next nail
 #define MIN_LINE_DIST 2 // Minimum interval between nails that a line is allowed
 #define RETRY_LIMIT 10 // How many times to retry selecting the next valid nail
 

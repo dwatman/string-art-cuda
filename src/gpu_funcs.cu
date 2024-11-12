@@ -84,20 +84,38 @@ __device__ float compute_distance(float x0, float y0, float A, float B, float C,
 	return numerator * inv_denom;  // Multiply instead of divide
 }
 
+// Compute the angle of the line Ax + By + C = 0 relative to the x-axis
+// Angle returned is in the range 0 to pi
+__device__ float compute_angle(float A, float B) {
+	// Calculate the angle in radians with respect to the x-axis
+	float angle = atan2f(-A, B); // atan2(-A, B) ensures the correct quadrant
+
+	// Convert the angle to the range [0, π] if necessary
+	if (angle < 0) angle += M_PI;
+
+	return angle;
+}
+
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData) {
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const cudaTextureObject_t tex) {
 	float A, B, C, inv_denom;
-	float dist;
+	float dist, angle;
+	float maxDist;
 	float value;
 	int line;
 
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
+	// Flip vertically
+	//int j_flip = height-1 - j;
+
+	// Calculate the maximum distance at which the line overlaps a pixel
+	maxDist = sqrtf(2)/2 + lineThickness/2;
 
 	if ((i<width) && (j<height)) {
-		value = 0.0f;
+		value = 1.0f;
 
 		for (line=0; line<NUM_LINES; line++) {
 			// Get line parameters (format Ax + By + C = 0)
@@ -107,16 +125,19 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 			C = lineData[4*line + 2];
 			inv_denom = lineData[4*line + 3];
 
+			// Calculate distance and angle for calculating partial coverage
 			dist = compute_distance(i, j, A, B, C, inv_denom);
-			value = max(value, min(1.0f, max(0.0f, 1.2f - dist/1.5f)));
+			angle = compute_angle(A, B);
+
+			// Look up the coverage at this pixel and accumulate it to the total
+			value *= (1.0f - tex2D<float>(tex, angle, dist/maxDist));
 		}
 
 		// Convert and store value into output array
-		if (value > 0.0f) dataDst[j*pitchDst + i] = value;
+		if (value < 1.0f) dataDst[j*pitchDst + i] = max(0.0f, value);
 	}
-}
 
-// Draw a line
+}
 // Draw many lines
 void GpuDrawLines(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
@@ -131,7 +152,7 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						1);
 
 	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
-																width, height, gpuData->lineData);
+																width, height, gpuData->lineData, STRING_THICKNESS, gpuData->texCoverage);
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
