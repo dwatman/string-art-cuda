@@ -91,7 +91,7 @@ __device__ float compute_angle(float A, float B) {
 	float angle = atan2f(-A, B); // atan2(-A, B) ensures the correct quadrant
 
 	// Convert the angle to the range [0, π] if necessary
-	if (angle < 0) angle += M_PI;
+	if (angle < 0) angle += (float)M_PI;
 
 	return angle;
 }
