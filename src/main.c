@@ -19,6 +19,7 @@ int pointList[NUM_LINES+1];
 
 // CPU buffers
 uint8_t *h_imageIn = NULL;
+uint8_t *h_weights = NULL;
 uint8_t *h_imageOut = NULL;
 float   *h_lineCoverage = NULL;
 line_t *lines = NULL;
@@ -26,9 +27,11 @@ line_t *lines = NULL;
 // GPU buffers
 gpuData_t gpuData;
 
+char filenameInput[] = "test.png";
+
 int main(int argc, char* argv[]) {
 	int err;
-	int i;
+	int i, j;
 	float lineRatio;
 
 	printf("Start\n");
@@ -40,7 +43,7 @@ int main(int argc, char* argv[]) {
 
 	// Check how the number of lines compares to the max possible unique connections
 	lineRatio = (float)NUM_LINES/((NUM_NAILS-1)*NUM_NAILS/2);
-	printf("Line ratio is %.2f%% of maximum connections\n\n", lineRatio*100);
+	printf("Line ratio is %.2f%% of maximum connections\n", lineRatio*100);
 
 	if (lineRatio >= 1.0f) {
 		printf("ERROR: Number of lines exceeds the number of possible connections (%u)\n", (NUM_NAILS-1)*NUM_NAILS/2);
@@ -52,15 +55,34 @@ int main(int argc, char* argv[]) {
 	}
 	printf("\n");
 
+	int widthIn, heightIn;
+	// Load input image
+	err = load_greyscale_png(filenameInput, &h_imageIn, &widthIn, &heightIn);
+	if (err == 0) {
+		printf("Loaded input %s (%dx%d)\n", filenameInput, widthIn, heightIn);
+	}
+	else {
+		printf("Failed to load image %s\n", filenameInput);
+		return -2;
+	}
+
+	if (widthIn != heightIn)
+		printf("WARNING: Input image is not square, it will be stretched to fit\n");
+
 	atexit(GpuCleanup); // set cleanup function for GPU memory
-	GpuInitBuffers(&gpuData); // Initialise GPU buffers
+	GpuInitBuffers(&gpuData, widthIn, heightIn); // Initialise GPU buffers
 
 	// Allocate global buffers
 	atexit(cleanup); // set cleanup function for CPU memory
+	InitPinnedBuffers(&gpuData);
 	InitPinnedBuffers();
 
 	// Clear GPU buffers
 	ClearBuffers(&gpuData);
+
+	// Load the input image into a GPU texture
+	GpuUpdateImageIn(&gpuData, h_imageIn);
+	InitImageInTexture(&gpuData);
 
 	// Allocate CPU buffers
 	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
@@ -81,7 +103,7 @@ int main(int argc, char* argv[]) {
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);
 
 	// Map the coverage data to a texture for fast lookup
-	InitCoverageTexture(&gpuData.texCoverage, gpuData.lineCoverage, gpuData.pitchCoverage);
+	InitCoverageTexture(&gpuData);
 
 	// Reset the map of line connections between nails
 	ResetConnections();
@@ -138,21 +160,6 @@ int main(int argc, char* argv[]) {
 	// 	printf("Point %3u = %3u\n", i, pointList[i]);
 	// }
 
-	// Display connection matrix
-	int j;
-	for (j=0; j<NUM_NAILS; j++) {
-		printf("%3u ", j);
-		for (i=0; i<NUM_NAILS; i++) {
-			if (i==j)
-				printf("\\");
-			else if (IsConnected(i, j))
-				printf("X");
-			else
-				printf(" ");
-		}
-		printf("\n");
-	}
-
 	// Copy line data to GPU memory
 	GpuLoadLines(&gpuData, lines);
 
@@ -163,12 +170,12 @@ int main(int argc, char* argv[]) {
 	GpuOutConvert(h_imageOut, &gpuData);
 
 	// Clear areas outside the border of nails
-	for (j=0; j<DATA_SIZE; j++) {
-		for (i=0; i<DATA_SIZE; i++) {
-			if (inside_poly(nails, NUM_NAILS, i, j) == 0)
-				h_imageOut[j*DATA_SIZE + i] = 128;
-		}
-	}
+	// for (j=0; j<DATA_SIZE; j++) {
+	// 	for (i=0; i<DATA_SIZE; i++) {
+	// 		if (inside_poly(nails, NUM_NAILS, i, j) == 0)
+	// 			h_imageOut[j*DATA_SIZE + i] = 128;
+	// 	}
+	// }
 
 	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);

@@ -23,10 +23,12 @@ cudaError_t cudaLastError(const char* const file, const int line);
 int  GpuInit(void);
 void GpuPinMemory(void *ptr, size_t size);
 void GpuUnPinMemory(void *ptr);
-int InitPinnedBuffers(void);
+int InitPinnedBuffers(gpuData_t *gpuData);
 void FreePinnedBuffers(void);
-void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch);
+void InitCoverageTexture(gpuData_t *deviceData);
+void InitImageInTexture(gpuData_t *deviceData);
 void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData);
+void GpuUpdateImageIn(gpuData_t *deviceData, const uint8_t *hostData);
 void GpuSync(void);
 void ClearBuffers(gpuData_t *gpuData);
 

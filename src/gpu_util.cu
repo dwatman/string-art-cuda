@@ -5,6 +5,7 @@
 
 // CPU memory buffers
 extern uint8_t *h_imageIn;
+extern uint8_t *h_weights;
 extern uint8_t *h_imageOut;
 extern float   *h_lineCoverage;
 
@@ -114,10 +115,13 @@ int AllocAndAlignPinned(void **buf, size_t size) {
 }
 
 // Initialise pinned host memory
-int InitPinnedBuffers(void) {
+int InitPinnedBuffers(gpuData_t *gpuData) {
 	printf("InitPinnedBuffers\n");
 
-	AllocAndAlignPinned((void **)&h_imageIn, IMG_WIDTH * IMG_HEIGHT * sizeof(uint8_t));
+	// imageIn is already allocated so pin it only
+	GpuPinMemory(h_imageIn, gpuData->srcWidth * gpuData->srcHeight * sizeof(uint8_t));
+	//AllocAndAlignPinned((void **)&h_imageIn, gpuData->srcWidth * gpuData->srcHeight * sizeof(uint8_t));
+
 	AllocAndAlignPinned((void **)&h_imageOut, DATA_SIZE * DATA_SIZE * sizeof(uint8_t));
 	AllocAndAlignPinned((void **)&h_lineCoverage, LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES * sizeof(float));
 
@@ -149,7 +153,7 @@ void FreePinnedBuffers(void) {
 }
 
 // Create a bindless texture for line coverage data
-void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch) {
+void InitCoverageTexture(gpuData_t *deviceData) {
 	cudaResourceDesc texRes;
 	cudaTextureDesc texDescr;
 
@@ -159,11 +163,11 @@ void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch)
 
 	// Set up the 2D texture parameters
 	texRes.resType = cudaResourceTypePitch2D;
-	texRes.res.pitch2D.devPtr = (void *)data;
+	texRes.res.pitch2D.devPtr = (void *)deviceData->lineCoverage;
 	texRes.res.pitch2D.desc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
 	texRes.res.pitch2D.width = LINE_TEX_ANGLE_SAMPLES;
 	texRes.res.pitch2D.height = LINE_TEX_DIST_SAMPLES;
-	texRes.res.pitch2D.pitchInBytes = pitch;
+	texRes.res.pitch2D.pitchInBytes = deviceData->pitchCoverage;
 
 	// Set up the way the texture is accessed
 	texDescr.normalizedCoords = 1;
@@ -172,7 +176,34 @@ void InitCoverageTexture(cudaTextureObject_t *tex, const float *data, int pitch)
 	texDescr.addressMode[1] = cudaAddressModeClamp;
 	texDescr.readMode = cudaReadModeElementType;
 
-	CUDA_CHECK(cudaCreateTextureObject(tex, &texRes, &texDescr, NULL));
+	CUDA_CHECK(cudaCreateTextureObject(&deviceData->texCoverage, &texRes, &texDescr, NULL));
+}
+
+// Create a bindless texture for the input image
+void InitImageInTexture(gpuData_t *deviceData) {
+	cudaResourceDesc texRes;
+	cudaTextureDesc texDescr;
+
+	// Clear resource descriptors
+	memset(&texRes, 0, sizeof(cudaResourceDesc));
+	memset(&texDescr, 0, sizeof(cudaTextureDesc));
+
+	// Set up the 2D texture parameters
+	texRes.resType = cudaResourceTypePitch2D;
+	texRes.res.pitch2D.devPtr = (void *)deviceData->imgIn;
+	texRes.res.pitch2D.desc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
+	texRes.res.pitch2D.width = deviceData->srcWidth;
+	texRes.res.pitch2D.height = deviceData->srcHeight;
+	texRes.res.pitch2D.pitchInBytes = deviceData->pitchIn;
+
+	// Set up the way the texture is accessed
+	texDescr.normalizedCoords = 1;
+	texDescr.filterMode = cudaFilterModeLinear;
+	texDescr.addressMode[0] = cudaAddressModeClamp;
+	texDescr.addressMode[1] = cudaAddressModeClamp;
+	texDescr.readMode = cudaReadModeNormalizedFloat;
+
+	CUDA_CHECK(cudaCreateTextureObject(&deviceData->texImageIn, &texRes, &texDescr, NULL));
 }
 
 // Copy line coverage data to GPU
@@ -181,6 +212,15 @@ void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData) {
 		deviceData->lineCoverage, deviceData->pitchCoverage,
 		hostData, LINE_TEX_ANGLE_SAMPLES*sizeof(float),
 		LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES,
+		cudaMemcpyHostToDevice, deviceData->stream));
+}
+
+// Copy input image to GPU
+void GpuUpdateImageIn(gpuData_t *deviceData, const uint8_t *hostData) {
+	CUDA_CHECK(cudaMemcpy2DAsync(
+		deviceData->imgIn, deviceData->pitchIn,
+		hostData, deviceData->srcWidth*sizeof(uint8_t),
+		deviceData->srcWidth*sizeof(uint8_t), deviceData->srcHeight,
 		cudaMemcpyHostToDevice, deviceData->stream));
 }
 

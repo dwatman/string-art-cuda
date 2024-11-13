@@ -17,16 +17,18 @@ typedef struct {
 	// LINE COVERAGE DATA
 	float *lineCoverage;			// Precalculated coverage of pixels vs distance/angle
 	size_t pitchCoverage;			// Pitch in bytes
+	// TEXTURES
 	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
+	cudaTextureObject_t texImageIn;  // Texture for input image
 	// PITCH FOR IMAGE BUFFERS
 	// Note: pitch is in bytes
-	size_t pitchInOrig;
-	size_t pitchInFloat;
+	size_t pitchIn;
+	size_t pitchWeight;
 	size_t pitchAccum;
 	size_t pitchOutput;
 	// IMAGE BUFFERS
-	uint8_t  *imgInOrig;	// Input image data
-	float    *imgInFloat;	// Input image data as float
+	uint8_t  *imgIn;		// Input image data
+	uint8_t  *imgWeight;	// Input weights
 	float    *imgAccum;		// Accumulated data
 	uint8_t  *imgOut;		// Output image
 } gpuData_t;
@@ -36,7 +38,7 @@ typedef struct {
 extern "C" {
 #endif
 
-int  GpuInitBuffers(gpuData_t *gpuData);
+int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn);
 void GpuFreeBuffers(gpuData_t *gpuData);
 void GpuLoadLines(gpuData_t *gpuData, line_t *lines);
 void GpuDrawLines(gpuData_t *gpuData);

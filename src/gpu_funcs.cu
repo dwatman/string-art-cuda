@@ -13,14 +13,14 @@
 extern gpuData_t gpuData;
 
 // Initialise gpuImgData_t structure and allocate buffers
-int GpuInitBuffers(gpuData_t *gpuData) {
+int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	printf("GpuInitBuffers\n");
 
 	// Clear the structure in case of errors part way through initialisation
 	memset(gpuData, 0, sizeof(gpuData_t));
 
-	gpuData->srcWidth  = IMG_WIDTH;
-	gpuData->srcHeight = IMG_HEIGHT;
+	gpuData->srcWidth  = widthIn;
+	gpuData->srcHeight = heightIn;
 	gpuData->dstSize = DATA_SIZE;
 
 	// Create stream for processing
@@ -29,19 +29,19 @@ int GpuInitBuffers(gpuData_t *gpuData) {
 	CUDA_CHECK(cudaMalloc(&gpuData->lineData, NUM_LINES*4*sizeof(float)));
 
 	// Global memory on GPU
-	CUDA_CHECK(cudaMallocPitch(&gpuData->imgInOrig, &gpuData->pitchInOrig,
+	CUDA_CHECK(cudaMallocPitch(&gpuData->imgIn, &gpuData->pitchIn,
 							gpuData->srcWidth*sizeof(uint8_t), gpuData->srcHeight));
-	CUDA_CHECK(cudaMallocPitch(&gpuData->imgInFloat, &gpuData->pitchInFloat,
-							gpuData->srcWidth*sizeof(float), gpuData->srcHeight));
+	CUDA_CHECK(cudaMallocPitch(&gpuData->imgWeight, &gpuData->pitchWeight,
+							gpuData->srcWidth*sizeof(uint8_t), gpuData->srcHeight));
 	CUDA_CHECK(cudaMallocPitch(&gpuData->imgAccum, &gpuData->pitchAccum,
 							gpuData->dstSize*sizeof(float), gpuData->dstSize));
 	CUDA_CHECK(cudaMallocPitch(&gpuData->imgOut, &gpuData->pitchOutput,
 							gpuData->dstSize*sizeof(uint8_t), gpuData->dstSize));
 
-	printf("pitch inOrig:  %5lu (%lu) at %p\n", gpuData->pitchInOrig, 	gpuData->srcWidth*sizeof(uint8_t), gpuData->imgInOrig);
-	printf("pitch inFloat: %5lu (%lu) at %p\n", gpuData->pitchInFloat, 	gpuData->srcWidth*sizeof(float), gpuData->imgInFloat);
-	printf("pitch Accum:   %5lu (%lu) at %p\n", gpuData->pitchAccum, 	gpuData->srcWidth*sizeof(float), gpuData->imgAccum);
-	printf("pitch output:  %5lu (%lu) at %p\n", gpuData->pitchOutput, 	gpuData->srcWidth*sizeof(uint8_t), gpuData->imgOut);
+	printf("pitch imgIn:     %5lu (%lu) at %p\n", gpuData->pitchIn, 	gpuData->srcWidth*sizeof(uint8_t), gpuData->imgIn);
+	printf("pitch imgWeight: %5lu (%lu) at %p\n", gpuData->pitchWeight, gpuData->srcWidth*sizeof(uint8_t), gpuData->imgWeight);
+	printf("pitch Accum:     %5lu (%lu) at %p\n", gpuData->pitchAccum, 	gpuData->srcWidth*sizeof(float), gpuData->imgAccum);
+	printf("pitch output:    %5lu (%lu) at %p\n", gpuData->pitchOutput, gpuData->srcWidth*sizeof(uint8_t), gpuData->imgOut);
 
 	// Memory for 2D texture
 	CUDA_CHECK(cudaMallocPitch(&gpuData->lineCoverage, &gpuData->pitchCoverage,
@@ -60,10 +60,11 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 
 	CUDA_CHECK(cudaStreamDestroy(gpuData->stream));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texCoverage));
+	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texImageIn));
 
 	// Free GPU memory
-	if (gpuData->imgInOrig != NULL) 	CUDA_CHECK(cudaFree(gpuData->imgInOrig));
-	if (gpuData->imgInFloat != NULL) 	CUDA_CHECK(cudaFree(gpuData->imgInFloat));
+	if (gpuData->imgIn != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgIn));
+	if (gpuData->imgWeight != NULL) 	CUDA_CHECK(cudaFree(gpuData->imgWeight));
 	if (gpuData->imgAccum != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgAccum));
 	if (gpuData->imgOut != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgOut));
 
