@@ -211,6 +211,33 @@ void InitImageInTexture(gpuData_t *deviceData) {
 	CUDA_CHECK(cudaCreateTextureObject(&deviceData->texImageIn, &texRes, &texDescr, NULL));
 }
 
+// Create a bindless texture for the image weights
+void InitWeightsTexture(gpuData_t *deviceData) {
+	cudaResourceDesc texRes;
+	cudaTextureDesc texDescr;
+
+	// Clear resource descriptors
+	memset(&texRes, 0, sizeof(cudaResourceDesc));
+	memset(&texDescr, 0, sizeof(cudaTextureDesc));
+
+	// Set up the 2D texture parameters
+	texRes.resType = cudaResourceTypePitch2D;
+	texRes.res.pitch2D.devPtr = (void *)deviceData->imgWeight;
+	texRes.res.pitch2D.desc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
+	texRes.res.pitch2D.width = deviceData->srcWidth;
+	texRes.res.pitch2D.height = deviceData->srcHeight;
+	texRes.res.pitch2D.pitchInBytes = deviceData->pitchWeight;
+
+	// Set up the way the texture is accessed
+	texDescr.normalizedCoords = 1;
+	texDescr.filterMode = cudaFilterModeLinear;
+	texDescr.addressMode[0] = cudaAddressModeClamp;
+	texDescr.addressMode[1] = cudaAddressModeClamp;
+	texDescr.readMode = cudaReadModeNormalizedFloat;
+
+	CUDA_CHECK(cudaCreateTextureObject(&deviceData->texWeights, &texRes, &texDescr, NULL));
+}
+
 // Copy line coverage data to GPU
 void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData) {
 	CUDA_CHECK(cudaMemcpy2DAsync(
@@ -224,6 +251,15 @@ void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData) {
 void GpuUpdateImageIn(gpuData_t *deviceData, const uint8_t *hostData) {
 	CUDA_CHECK(cudaMemcpy2DAsync(
 		deviceData->imgIn, deviceData->pitchIn,
+		hostData, deviceData->srcWidth*sizeof(uint8_t),
+		deviceData->srcWidth*sizeof(uint8_t), deviceData->srcHeight,
+		cudaMemcpyHostToDevice, deviceData->stream));
+}
+
+// Copy weighting mask to GPU
+void GpuUpdateWeights(gpuData_t *deviceData, const uint8_t *hostData) {
+	CUDA_CHECK(cudaMemcpy2DAsync(
+		deviceData->imgWeight, deviceData->pitchWeight,
 		hostData, deviceData->srcWidth*sizeof(uint8_t),
 		deviceData->srcWidth*sizeof(uint8_t), deviceData->srcHeight,
 		cudaMemcpyHostToDevice, deviceData->stream));

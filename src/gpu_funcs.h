@@ -20,6 +20,7 @@ typedef struct {
 	// TEXTURES
 	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
 	cudaTextureObject_t texImageIn;  // Texture for input image
+	cudaTextureObject_t texWeights;  // Texture for image weights
 	// PITCH FOR IMAGE BUFFERS
 	// Note: pitch is in bytes
 	size_t pitchIn;

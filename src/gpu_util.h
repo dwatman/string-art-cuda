@@ -27,8 +27,10 @@ int InitPinnedBuffers(gpuData_t *gpuData);
 void FreePinnedBuffers(void);
 void InitCoverageTexture(gpuData_t *deviceData);
 void InitImageInTexture(gpuData_t *deviceData);
+void InitWeightsTexture(gpuData_t *deviceData);
 void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData);
 void GpuUpdateImageIn(gpuData_t *deviceData, const uint8_t *hostData);
+void GpuUpdateWeights(gpuData_t *deviceData, const uint8_t *hostData);
 void GpuSync(void);
 void ClearBuffers(gpuData_t *gpuData);
 

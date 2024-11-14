@@ -111,6 +111,10 @@ int main(int argc, char* argv[]) {
 	GpuUpdateImageIn(&gpuData, h_imageIn);
 	InitImageInTexture(&gpuData);
 
+	// Load the weights into a GPU texture
+	GpuUpdateWeights(&gpuData, h_weights);
+	InitWeightsTexture(&gpuData);
+
 
 	// Calculate the coverage of lines over pixels
 	CalcLineCoverage(h_lineCoverage, STRING_THICKNESS);

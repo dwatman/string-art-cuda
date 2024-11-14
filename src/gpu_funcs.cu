@@ -61,6 +61,7 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	CUDA_CHECK(cudaStreamDestroy(gpuData->stream));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texCoverage));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texImageIn));
+	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texWeights));
 
 	// Free GPU memory
 	if (gpuData->imgIn != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgIn));
