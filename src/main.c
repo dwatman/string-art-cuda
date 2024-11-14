@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h> // for atexit(), rand()
-//#include <string.h>
+#include <string.h> // for memset
 #include <time.h> // to init rand()
 #include <math.h> // for abs
 
@@ -74,27 +74,43 @@ int main(int argc, char* argv[]) {
 
 	// Allocate global buffers
 	atexit(cleanup); // set cleanup function for CPU memory
-	InitPinnedBuffers(&gpuData);
-	InitPinnedBuffers();
+	InitPinnedBuffers(&gpuData);heightIn*sizeof(uint8_t);
 
 	// Clear GPU buffers
 	ClearBuffers(&gpuData);
+
+
+	// Set nail positions in a circle (for now)
+	InitNailPositions(nails, NUM_NAILS);
+
+	// for (i=0; i<NUM_NAILS; i++) {
+	// 	printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
+	// }
+
+	// Allocate CPU buffer for lines
+	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
+
+	// Create a mask, not pinned (TODO: optionally load from image)
+	// check cleanup order
+	h_weights = malloc(widthIn*heightIn*sizeof(uint8_t));
+
+	// Fill the weights with maximum value as there is no image
+	memset(h_weights, 255, widthIn*heightIn*sizeof(uint8_t));
+
+	// Clear areas outside the border of nails with black to ignore it
+	for (j=0; j<heightIn; j++) {
+		for (i=0; i<widthIn; i++) {
+			if (inside_poly(nails, NUM_NAILS, i*4, j*4) == 0)
+				h_weights[j*widthIn + i] = 0;
+		}
+	}
+	//write_png("mask.png", h_weights, widthIn, heightIn, 8);
+
 
 	// Load the input image into a GPU texture
 	GpuUpdateImageIn(&gpuData, h_imageIn);
 	InitImageInTexture(&gpuData);
 
-	// Allocate CPU buffers
-	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
-
-	// Set nail positions in a circle (for now)
-	InitNailPositions(nails, NUM_NAILS);
-
-/*
-	for (i=0; i<NUM_NAILS; i++) {
-		printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
-	}
-*/
 
 	// Calculate the coverage of lines over pixels
 	CalcLineCoverage(h_lineCoverage, STRING_THICKNESS);
@@ -168,14 +184,6 @@ int main(int argc, char* argv[]) {
 
 	// Convert the image to uint and write to CPU buffer
 	GpuOutConvert(h_imageOut, &gpuData);
-
-	// Clear areas outside the border of nails
-	// for (j=0; j<DATA_SIZE; j++) {
-	// 	for (i=0; i<DATA_SIZE; i++) {
-	// 		if (inside_poly(nails, NUM_NAILS, i, j) == 0)
-	// 			h_imageOut[j*DATA_SIZE + i] = 128;
-	// 	}
-	// }
 
 	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);

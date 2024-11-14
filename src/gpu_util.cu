@@ -141,6 +141,11 @@ void FreePinnedBuffers(void) {
 		free(h_imageIn);
 	}
 
+	if (h_weights != NULL) {
+		//GpuUnPinMemory(h_weights);
+		free(h_weights);
+	}
+
 	if (h_imageOut != NULL) {
 		GpuUnPinMemory(h_imageOut);
 		free(h_imageOut);
