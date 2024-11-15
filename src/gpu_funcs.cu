@@ -140,6 +140,7 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 	}
 
 }
+
 // Draw many lines
 void GpuDrawLines(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
@@ -159,6 +160,129 @@ void GpuDrawLines(gpuData_t *gpuData) {
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
 
+
+// Compute the sum of weighted errors for each block in the image
+__global__ void computeBlockErrors_kernel(double* partialSums, const float* dataAccum, size_t pitchAccum, int width, int height,
+									const cudaTextureObject_t texImage, const cudaTextureObject_t texWeight) {
+
+	__shared__ double blockSum[SUM_BLOCK_SIZE*SUM_BLOCK_SIZE];
+
+	float image, accum, weight;
+	float diff;
+
+	// Linear thread ID
+	int tid = threadIdx.y * blockDim.x + threadIdx.x;
+
+	// Pixel 2D position
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// Normalised 2D coordinates for textures
+	float u = (float)i / (float)(width - 1);
+	float v = (float)j / (float)(height - 1);
+
+	// Fetch the data for this pixel
+	image  = tex2D<float>(texImage, u, v);  // Input image
+	weight = tex2D<float>(texWeight, u, v); // Weight
+	accum  = dataAccum[j*pitchAccum + i];   // Generated line image
+
+	// Compute the weighted absolute difference for the pixel
+	diff = fabsf(image - accum)*weight;
+
+	// Store the result in shared memory
+	blockSum[tid] = diff;
+	__syncthreads();
+
+	// Perform reduction sum within the block
+	for (int stride = (SUM_BLOCK_SIZE*SUM_BLOCK_SIZE) / 2; stride > 0; stride >>= 1) {
+		if (tid < stride) {
+			blockSum[tid] += blockSum[tid + stride];
+		}
+		__syncthreads();
+	}
+
+	// Write the block's sum to the global array
+	if (tid == 0) {
+		partialSums[blockIdx.y * gridDim.x + blockIdx.x] = blockSum[0];
+	}
+
+}
+
+// Sum the block errors into a total error
+__global__ void reducePartialSums_kernel(double* result, const double* partialSums, int numElements) {
+	__shared__ double blockSum[SUM_BLOCK_SIZE*SUM_BLOCK_SIZE];
+
+	int tx = threadIdx.x;
+	int index = blockIdx.x * blockDim.x + tx;
+
+	double sum = (index < numElements) ? partialSums[index] : 0.0;
+
+	blockSum[tx] = sum;
+	__syncthreads();
+
+	// Perform reduction within the block
+	for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+		if (tx < stride) {
+			blockSum[tx] += blockSum[tx + stride];
+		}
+		__syncthreads();
+	}
+
+	// Write the block's sum to the global result
+	if (tx == 0) {
+		atomicAdd(result, blockSum[0]);
+	}
+}
+
+// Compute the total weighted error between the original image and the generated lines
+double GpucalculateImageError(gpuData_t *gpuData) {
+	double* d_partialSums;
+	double* d_result;
+
+	double h_result;
+
+	int width = gpuData->dstSize;
+	int height = gpuData->dstSize;
+
+	// Threads per Block
+	const dim3 blockSize(SUM_BLOCK_SIZE, SUM_BLOCK_SIZE, 1);
+
+	// Number of blocks (should alwyas be an integer multiple)
+	const dim3 gridSize(width/blockSize.x, height/blockSize.y, 1);
+
+	size_t numBlocks = gridSize.x * gridSize.y;
+	size_t partialSumsSize = numBlocks * sizeof(double);
+
+	CUDA_CHECK(cudaMalloc((void**)&d_partialSums, partialSumsSize));
+	CUDA_CHECK(cudaMalloc((void**)&d_result, sizeof(double)));
+
+	// Clear the total sum in GPU memory
+	cudaMemset(d_result, 0, sizeof(double));
+	CUDA_CHECK(cudaDeviceSynchronize());//??
+
+	// Launch the first kernel to compute block partial sums
+	computeBlockErrors_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(d_partialSums, gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), width, height,
+									gpuData->texImageIn, gpuData->texWeights);
+
+	//cudaStreamSynchronize(gpuData->stream);  // Synchronize after first kernel??
+
+	// Launch the second kernel to reduce partial sums
+	int threadsPerBlock = 256;
+	int blocksPerGrid = (numBlocks + threadsPerBlock - 1) / threadsPerBlock; // 16
+	reducePartialSums_kernel<<<blocksPerGrid, threadsPerBlock, 0, gpuData->stream>>>(d_result, d_partialSums, numBlocks);
+
+	CUDA_CHECK(cudaDeviceSynchronize());//??
+
+	// Retrieve the final result
+	cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);//STREAM?????
+
+	CUDA_CHECK(cudaFree(d_partialSums));
+	CUDA_CHECK(cudaFree(d_result));
+
+	return h_result;
+}
+
+
 // (GPU) Convert accumulator buffer to output format
 __global__
 void OutConvert_kernel(uint8_t *dataDst, size_t pitchDst, float *dataSrc, size_t pitchSrc, int width, int height) {
@@ -173,6 +297,7 @@ void OutConvert_kernel(uint8_t *dataDst, size_t pitchDst, float *dataSrc, size_t
 		dataDst[j*pitchDst + i] = round(dataSrc[j_flip*pitchSrc + i]*255.0f);
 	}
 }
+
 
 // Set initial image stats
 void GpuOutConvert(uint8_t *hostDst, gpuData_t *gpuData) {

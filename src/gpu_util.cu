@@ -297,8 +297,8 @@ void ClearBuffers(gpuData_t *gpuData) {
 						ceil(height/(float)blockSize.y),
 						1);
 
-	// Set accumulator to black
-	fill_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), 0.0f, width, height);
+	// Set accumulator to white
+	fill_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), 1.0f, width, height);
 
 	//CUDA_CHECK(cudaMemset2DAsync(gpuData->imgOut, gpuData->pitchOutput, 0x10, width, height, gpuData->stream));
 	CUDA_CHECK(cudaDeviceSynchronize());

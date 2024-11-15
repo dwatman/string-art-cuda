@@ -19,6 +19,9 @@
 #define LINE_TEX_ANGLE_SAMPLES 32
 #define LINE_TEX_DIST_SAMPLES 32
 
+// Block size for error summing (only 16 or 32)
+#define SUM_BLOCK_SIZE 16
+
 // Output size (square for now)
 #define DATA_SIZE 1024
 

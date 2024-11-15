@@ -43,6 +43,7 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn);
 void GpuFreeBuffers(gpuData_t *gpuData);
 void GpuLoadLines(gpuData_t *gpuData, line_t *lines);
 void GpuDrawLines(gpuData_t *gpuData);
+double GpucalculateImageError(gpuData_t *gpuData);
 void GpuOutConvert(uint8_t *hostDst, gpuData_t *gpuData);
 
 #ifdef __cplusplus

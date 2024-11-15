@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
 	int err;
 	int i, j;
 	float lineRatio;
+	double imageError;
 
 	printf("Start\n");
 
@@ -185,6 +186,10 @@ int main(int argc, char* argv[]) {
 
 	// Draw the set of lines in the GPU image buffer
 	GpuDrawLines(&gpuData);
+
+	// Compute error between original and generated images
+	imageError = GpucalculateImageError(&gpuData);
+	printf("imageError: %f\n", imageError);
 
 	// Convert the image to uint and write to CPU buffer
 	GpuOutConvert(h_imageOut, &gpuData);
