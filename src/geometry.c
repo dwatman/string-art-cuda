@@ -220,3 +220,61 @@ void CalcLineCoverage(float *map, float lineWidth) {
 	printf("maxval %f\n", maxval);
 
 }
+
+// Generate a random (but valid) list of points, and calculate line parameters
+// TODO: separate line calculation?
+int GenerateRandomPattern(line_t *lines, int *pointList, point_t *nails) {
+	point_t p0, p1;
+	int n0, n1;
+	int i;
+
+	// Reset the map of line connections between nails
+	ResetConnections();
+
+	// Select first nail
+	pointList[0] = rand() % NUM_NAILS;
+
+	// Create lines
+	for (i=0; i<NUM_LINES; i++) {
+		int retries = 0;
+
+		// Select next nail
+		pointList[i+1] = rand() % NUM_NAILS;
+
+		// If the selected nail is not valid (too close, already connected)
+		// Choose another until the limit is reached or a suitable nail is found
+		while ((retries < RETRY_LIMIT) && (ValidateNextNail(pointList[i], pointList[i+1], MIN_LINE_DIST) == 0)) {
+			retries++;
+			pointList[i+1] = rand() % NUM_NAILS;
+			//printf("Retry %u: %u -> %u\n", retries, pointList[i], pointList[i+1]);
+		}
+
+		if (retries == RETRY_LIMIT) {
+			printf("ERROR: Retry limit reached for line %u\n", i);
+			break;
+		}
+
+		SetConnection(pointList[i], pointList[i+1]);
+
+		p0.x = nails[pointList[i]].x;
+		p0.y = nails[pointList[i]].y;
+		p1.x = nails[pointList[i+1]].x;
+		p1.y = nails[pointList[i+1]].y;
+		lines[i] = PointsToLine(p0, p1);
+
+		//printf("Nail %3u to %3u\n", pointList[i], pointList[i+1]);
+		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
+		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
+	}
+
+	// Check if lines were unable to be completed
+	if (i < NUM_LINES) {
+		printf("ERROR: Unable to initialise all lines\n");
+		return -1;
+	}
+
+	// for (i=0; i<=NUM_LINES; i++) {
+	// 	printf("Point %3u = %3u\n", i, pointList[i]);
+	// }
+	return 0;
+}

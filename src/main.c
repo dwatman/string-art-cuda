@@ -14,9 +14,6 @@
 void cleanup(void);
 void GpuCleanup(void);
 
-point_t nails[NUM_NAILS];
-int pointList[NUM_LINES+1];
-
 // CPU buffers
 uint8_t *h_imageIn = NULL;
 uint8_t *h_weights = NULL;
@@ -34,6 +31,9 @@ int main(int argc, char* argv[]) {
 	int i, j;
 	float lineRatio;
 	double imageError;
+
+point_t nails[NUM_NAILS];
+int pointList[NUM_LINES+1];
 
 	printf("Start\n");
 
@@ -125,9 +125,6 @@ int main(int argc, char* argv[]) {
 
 	// Map the coverage data to a texture for fast lookup
 	InitCoverageTexture(&gpuData);
-
-	// Reset the map of line connections between nails
-	ResetConnections();
 
 
 	//srand(time(NULL));   // Initialise RNG

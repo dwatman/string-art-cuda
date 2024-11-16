@@ -30,7 +30,8 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	CUDA_CHECK(cudaMalloc(&gpuData->lineData, NUM_LINES*4*sizeof(float)));
 
 	// Buffers for image difference calculation
-	CUDA_CHECK(cudaMalloc((void**)&gpuData->partialSums, SUM_BLOCK_SIZE*SUM_BLOCK_SIZE*sizeof(double)));
+	int numBlocks = (DATA_SIZE/SUM_BLOCK_SIZE)*(DATA_SIZE/SUM_BLOCK_SIZE);
+	CUDA_CHECK(cudaMalloc((void**)&gpuData->partialSums, numBlocks*sizeof(double)));
 	CUDA_CHECK(cudaMalloc((void**)&gpuData->sumResult, sizeof(double)));
 
 	// Image buffers
@@ -144,9 +145,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 		}
 
 		// Convert and store value into output array
-		if (value < 1.0f) dataDst[j*pitchDst + i] = max(0.0f, value);
+		dataDst[j*pitchDst + i] = value;
 	}
-
 }
 
 // Draw many lines
@@ -173,7 +173,7 @@ void GpuDrawLines(gpuData_t *gpuData) {
 __global__ void computeBlockErrors_kernel(double* partialSums, const float* dataAccum, size_t pitchAccum, int width, int height,
 									const cudaTextureObject_t texImage, const cudaTextureObject_t texWeight) {
 
-	__shared__ double blockSum[SUM_BLOCK_SIZE*SUM_BLOCK_SIZE];
+	extern __shared__ double blockSum[];
 
 	float image, accum, weight;
 	float diff;
@@ -213,12 +213,11 @@ __global__ void computeBlockErrors_kernel(double* partialSums, const float* data
 	if (tid == 0) {
 		partialSums[blockIdx.y * gridDim.x + blockIdx.x] = blockSum[0];
 	}
-
 }
 
 // Sum the block errors into a total error
 __global__ void reducePartialSums_kernel(double* result, const double* partialSums, int numElements) {
-	__shared__ double blockSum[SUM_BLOCK_SIZE*SUM_BLOCK_SIZE];
+	extern __shared__ double blockSum[];
 
 	int tx = threadIdx.x;
 	int index = blockIdx.x * blockDim.x + tx;
@@ -244,6 +243,7 @@ __global__ void reducePartialSums_kernel(double* result, const double* partialSu
 
 // Compute the total weighted error between the original image and the generated lines
 double GpucalculateImageError(gpuData_t *gpuData) {
+	size_t sharedMemSize;
 	double h_result;
 
 	int width = gpuData->dstSize;
@@ -255,27 +255,28 @@ double GpucalculateImageError(gpuData_t *gpuData) {
 	// Number of blocks (should alwyas be an integer multiple)
 	const dim3 gridSize(width/blockSize.x, height/blockSize.y, 1);
 
-	size_t numBlocks = gridSize.x * gridSize.y;
+	size_t numBlocks = gridSize.x*gridSize.y;
 
 	// Clear the total sum in GPU memory
-	cudaMemset(gpuData->sumResult, 0, sizeof(double));
+	CUDA_CHECK(cudaMemset(gpuData->sumResult, 0, sizeof(double)));
 	CUDA_CHECK(cudaDeviceSynchronize());//??
 
 	// Launch the first kernel to compute block partial sums
-	computeBlockErrors_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->partialSums, gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), width, height,
-									gpuData->texImageIn, gpuData->texWeights);
+	sharedMemSize = SUM_BLOCK_SIZE*SUM_BLOCK_SIZE*sizeof(double);
 
-	//cudaStreamSynchronize(gpuData->stream);  // Synchronize after first kernel??
+	computeBlockErrors_kernel<<<gridSize, blockSize, sharedMemSize, gpuData->stream>>>(gpuData->partialSums, gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), width, height,
+									gpuData->texImageIn, gpuData->texWeights);
 
 	// Launch the second kernel to reduce partial sums
 	int threadsPerBlock = 256;
 	int blocksPerGrid = (numBlocks + threadsPerBlock - 1) / threadsPerBlock; // 16
-	reducePartialSums_kernel<<<blocksPerGrid, threadsPerBlock, 0, gpuData->stream>>>(gpuData->sumResult, gpuData->partialSums, numBlocks);
+	sharedMemSize = threadsPerBlock * sizeof(double);
 
-	CUDA_CHECK(cudaDeviceSynchronize());//??
+	reducePartialSums_kernel<<<blocksPerGrid, threadsPerBlock, sharedMemSize, gpuData->stream>>>(gpuData->sumResult, gpuData->partialSums, numBlocks);
 
 	// Retrieve the final result
-	cudaMemcpyAsync(&h_result, gpuData->sumResult, sizeof(double), cudaMemcpyDeviceToHost, gpuData->stream);
+	CUDA_CHECK(cudaMemcpyAsync(&h_result, gpuData->sumResult, sizeof(double), cudaMemcpyDeviceToHost, gpuData->stream));
+	CUDA_CHECK(cudaDeviceSynchronize());
 
 	return h_result;
 }

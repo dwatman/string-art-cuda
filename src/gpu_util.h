@@ -32,7 +32,7 @@ void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData);
 void GpuUpdateImageIn(gpuData_t *deviceData, const uint8_t *hostData);
 void GpuUpdateWeights(gpuData_t *deviceData, const uint8_t *hostData);
 void GpuSync(void);
-void ClearBuffers(gpuData_t *gpuData);
+void ClearAccumBuffer(gpuData_t *gpuData);
 
 #ifdef __cplusplus
 }
