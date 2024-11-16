@@ -99,13 +99,13 @@ int main(int argc, char* argv[]) {
 	memset(h_weights, 255, widthIn*heightIn*sizeof(uint8_t));
 
 	// Clear areas outside the border of nails with black to ignore it
+	// TODO: Fix for input size
 	for (j=0; j<heightIn; j++) {
 		for (i=0; i<widthIn; i++) {
 			if (inside_poly(nails, NUM_NAILS, i*4, j*4) == 0)
 				h_weights[j*widthIn + i] = 0;
 		}
 	}
-	//write_png("mask.png", h_weights, widthIn, heightIn, 8);
 
 
 	// Load the input image into a GPU texture
@@ -130,7 +130,8 @@ int main(int argc, char* argv[]) {
 	ResetConnections();
 
 
-	srand(time(NULL));   // Initialise RNG
+	//srand(time(NULL));   // Initialise RNG
+	srand(1234567);   // Initialise RNG to fixed seed for testing
 
 	point_t p0, p1;
 	int n0, n1;
@@ -193,6 +194,14 @@ int main(int argc, char* argv[]) {
 
 	// Convert the image to uint and write to CPU buffer
 	GpuOutConvert(h_imageOut, &gpuData);
+
+	// Clear areas outside the border of nails
+	for (j=0; j<DATA_SIZE; j++) {
+		for (i=0; i<DATA_SIZE; i++) {
+			if (inside_poly(nails, NUM_NAILS, i, j) == 0)
+				h_imageOut[j*DATA_SIZE + i] = 128;
+		}
+	}
 
 	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);

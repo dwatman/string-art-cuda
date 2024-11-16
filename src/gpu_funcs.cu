@@ -26,9 +26,14 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	// Create stream for processing
 	CUDA_CHECK(cudaStreamCreate(&gpuData->stream));
 
+	// Buffer for line data
 	CUDA_CHECK(cudaMalloc(&gpuData->lineData, NUM_LINES*4*sizeof(float)));
 
-	// Global memory on GPU
+	// Buffers for image difference calculation
+	CUDA_CHECK(cudaMalloc((void**)&gpuData->partialSums, SUM_BLOCK_SIZE*SUM_BLOCK_SIZE*sizeof(double)));
+	CUDA_CHECK(cudaMalloc((void**)&gpuData->sumResult, sizeof(double)));
+
+	// Image buffers
 	CUDA_CHECK(cudaMallocPitch(&gpuData->imgIn, &gpuData->pitchIn,
 							gpuData->srcWidth*sizeof(uint8_t), gpuData->srcHeight));
 	CUDA_CHECK(cudaMallocPitch(&gpuData->imgWeight, &gpuData->pitchWeight,
@@ -71,6 +76,9 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 
 	if (gpuData->lineData != NULL) 		CUDA_CHECK(cudaFree(gpuData->lineData));
 	if (gpuData->lineCoverage != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineCoverage));
+
+	if (gpuData->partialSums != NULL) 	CUDA_CHECK(cudaFree(gpuData->partialSums));
+	if (gpuData->sumResult != NULL) 	CUDA_CHECK(cudaFree(gpuData->sumResult));
 }
 
 // Copy line data to GPU
@@ -236,9 +244,6 @@ __global__ void reducePartialSums_kernel(double* result, const double* partialSu
 
 // Compute the total weighted error between the original image and the generated lines
 double GpucalculateImageError(gpuData_t *gpuData) {
-	double* d_partialSums;
-	double* d_result;
-
 	double h_result;
 
 	int width = gpuData->dstSize;
@@ -251,17 +256,13 @@ double GpucalculateImageError(gpuData_t *gpuData) {
 	const dim3 gridSize(width/blockSize.x, height/blockSize.y, 1);
 
 	size_t numBlocks = gridSize.x * gridSize.y;
-	size_t partialSumsSize = numBlocks * sizeof(double);
-
-	CUDA_CHECK(cudaMalloc((void**)&d_partialSums, partialSumsSize));
-	CUDA_CHECK(cudaMalloc((void**)&d_result, sizeof(double)));
 
 	// Clear the total sum in GPU memory
-	cudaMemset(d_result, 0, sizeof(double));
+	cudaMemset(gpuData->sumResult, 0, sizeof(double));
 	CUDA_CHECK(cudaDeviceSynchronize());//??
 
 	// Launch the first kernel to compute block partial sums
-	computeBlockErrors_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(d_partialSums, gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), width, height,
+	computeBlockErrors_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->partialSums, gpuData->imgAccum, gpuData->pitchAccum/sizeof(float), width, height,
 									gpuData->texImageIn, gpuData->texWeights);
 
 	//cudaStreamSynchronize(gpuData->stream);  // Synchronize after first kernel??
@@ -269,15 +270,12 @@ double GpucalculateImageError(gpuData_t *gpuData) {
 	// Launch the second kernel to reduce partial sums
 	int threadsPerBlock = 256;
 	int blocksPerGrid = (numBlocks + threadsPerBlock - 1) / threadsPerBlock; // 16
-	reducePartialSums_kernel<<<blocksPerGrid, threadsPerBlock, 0, gpuData->stream>>>(d_result, d_partialSums, numBlocks);
+	reducePartialSums_kernel<<<blocksPerGrid, threadsPerBlock, 0, gpuData->stream>>>(gpuData->sumResult, gpuData->partialSums, numBlocks);
 
 	CUDA_CHECK(cudaDeviceSynchronize());//??
 
 	// Retrieve the final result
-	cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);//STREAM?????
-
-	CUDA_CHECK(cudaFree(d_partialSums));
-	CUDA_CHECK(cudaFree(d_result));
+	cudaMemcpyAsync(&h_result, gpuData->sumResult, sizeof(double), cudaMemcpyDeviceToHost, gpuData->stream);
 
 	return h_result;
 }
@@ -290,7 +288,7 @@ void OutConvert_kernel(uint8_t *dataDst, size_t pitchDst, float *dataSrc, size_t
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// Flip vertically
-	int j_flip = height-1 - j;
+	int j_flip = j;//height-1 - j;
 
 	if ((i<width) && (j<height)) {
 		// Convert and store value into output array

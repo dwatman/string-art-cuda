@@ -17,6 +17,9 @@ typedef struct {
 	// LINE COVERAGE DATA
 	float *lineCoverage;			// Precalculated coverage of pixels vs distance/angle
 	size_t pitchCoverage;			// Pitch in bytes
+	// ERROR CALCULATION
+	double *partialSums;			// Block sums of error
+	double *sumResult;				// Total error
 	// TEXTURES
 	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
 	cudaTextureObject_t texImageIn;  // Texture for input image
