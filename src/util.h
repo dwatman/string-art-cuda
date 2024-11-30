@@ -30,6 +30,7 @@ line_t PointsToLine(point_t p1, point_t p2);
 line_t DistAngleToLine(float dist, float angle);
 void ResetConnections(void);
 void SetConnection(int i, int j);
+void ClearConnection(int i, int j);
 int IsConnected(int i, int j);
 
 #endif

@@ -102,6 +102,21 @@ void SetConnection(int i, int j) {
 	}
 }
 
+// Clear a connection (in both directions)
+void ClearConnection(int i, int j) {
+	// Prevent out-of-array access
+	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
+		return;
+
+	int bit_index = get_bit_index(i, j);
+	connections[bit_index / 64] &= ~((uint64_t)1 << (bit_index % 64));
+
+	if (i != j) { // For non-diagonal entries, clear the reverse as well
+		bit_index = get_bit_index(j, i);
+		connections[bit_index / 64] &= ~((uint64_t)1 << (bit_index % 64));
+	}
+}
+
 // Check if two nails are connected
 int IsConnected(int i, int j) {
 	// Prevent out of array access
