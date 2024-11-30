@@ -24,7 +24,7 @@ line_t *lines = NULL;
 // GPU buffers
 gpuData_t gpuData;
 
-char filenameInput[] = "test.png";
+char filenameInput[] = "test_line.png";
 
 int main(int argc, char* argv[]) {
 	int err;
@@ -77,9 +77,6 @@ int pointList[NUM_LINES+1];
 	atexit(cleanup); // set cleanup function for CPU memory
 	InitPinnedBuffers(&gpuData);heightIn*sizeof(uint8_t);
 
-	// Clear GPU buffers
-	ClearBuffers(&gpuData);
-
 
 	// Set nail positions in a circle (for now)
 	InitNailPositions(nails, NUM_NAILS);
@@ -107,7 +104,6 @@ int pointList[NUM_LINES+1];
 		}
 	}
 
-
 	// Load the input image into a GPU texture
 	GpuUpdateImageIn(&gpuData, h_imageIn);
 	InitImageInTexture(&gpuData);
@@ -127,70 +123,42 @@ int pointList[NUM_LINES+1];
 	InitCoverageTexture(&gpuData);
 
 
-	//srand(time(NULL));   // Initialise RNG
-	srand(1234567);   // Initialise RNG to fixed seed for testing
+	srand(time(NULL));   // Initialise RNG
+	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
-	point_t p0, p1;
-	int n0, n1;
+	double bestError = 10000000.0;
 
-	// First nail
-	pointList[0] = rand() % NUM_NAILS;
+	for (i=0; i<10; i++) {
 
-	// Create lines
-	for (i=0; i<NUM_LINES; i++) {
-		int retries = 0;
+		// Generate an initial random line pattern
+		err = GenerateRandomPattern(lines, pointList, nails);
+		if (err) return -3;
 
-		// Select next nail
-		pointList[i+1] = rand() % NUM_NAILS;
+		// Copy line data to GPU memory
+		GpuLoadLines(&gpuData, lines);
 
-		// If the selected nail is not valid (too close, already connected)
-		// Choose another until the limit is reached or a suitable nail is found
-		while ((retries < RETRY_LIMIT) && (ValidateNextNail(pointList[i], pointList[i+1], MIN_LINE_DIST) == 0)) {
-			retries++;
-			pointList[i+1] = rand() % NUM_NAILS;
-			//printf("Retry %u: %u -> %u\n", retries, pointList[i], pointList[i+1]);
+		// Clear accumulator buffer ****NOT NEEDED?
+		//ClearAccumBuffer(&gpuData);
+
+		// Draw the set of lines in the GPU image buffer
+		GpuDrawLines(&gpuData);
+
+		// Compute error between original and generated images
+		imageError = GpucalculateImageError(&gpuData);
+		printf("#%i imageError: %f", i, imageError);
+
+		if (imageError < bestError) {
+			bestError = imageError;
+			GpuOutConvert(h_imageOut, &gpuData);
+			printf("  (best)");
 		}
-
-		if (retries == RETRY_LIMIT) {
-			printf("ERROR: Retry limit reached for line %u\n", i);
-			break;
-		}
-
-		SetConnection(pointList[i], pointList[i+1]);
-
-		p0.x = nails[pointList[i]].x;
-		p0.y = nails[pointList[i]].y;
-		p1.x = nails[pointList[i+1]].x;
-		p1.y = nails[pointList[i+1]].y;
-		lines[i] = PointsToLine(p0, p1);
-
-		//printf("Nail %3u to %3u\n", pointList[i], pointList[i+1]);
-		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
-		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
+		printf("\n");
+		CUDA_CHECK(cudaDeviceSynchronize());
 	}
+	printf("bestError: %f\n", bestError);
 
-	// Check if lines were unable to be completed
-	if (i < NUM_LINES) {
-		printf("ERROR: Unable to initialise all lines\n");
-		return -1;
-	}
-
-	// for (i=0; i<=NUM_LINES; i++) {
-	// 	printf("Point %3u = %3u\n", i, pointList[i]);
-	// }
-
-	// Copy line data to GPU memory
-	GpuLoadLines(&gpuData, lines);
-
-	// Draw the set of lines in the GPU image buffer
-	GpuDrawLines(&gpuData);
-
-	// Compute error between original and generated images
-	imageError = GpucalculateImageError(&gpuData);
-	printf("imageError: %f\n", imageError);
-
-	// Convert the image to uint and write to CPU buffer
-	GpuOutConvert(h_imageOut, &gpuData);
+	// // Convert the image to uint and write to CPU buffer
+	// GpuOutConvert(h_imageOut, &gpuData);
 
 	// Clear areas outside the border of nails
 	for (j=0; j<DATA_SIZE; j++) {
