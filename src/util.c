@@ -126,3 +126,23 @@ int IsConnected(int i, int j) {
 	int bit_index = get_bit_index(i, j);
 	return (connections[bit_index / 64] & ((uint64_t)1 << (bit_index % 64))) ? 1 : 0;
 }
+
+//#include <stdio.h>
+// Calculate the total length of string
+double CalcTotalLength(const int *pointList, const point_t *nails) {
+	int i;
+	float dx, dy, dist;
+	double totalLength = 0.0;
+
+	for (i=0; i<NUM_LINES; i++) {
+		dx = nails[pointList[i]].x - nails[pointList[i+1]].x;
+		dy = nails[pointList[i]].y - nails[pointList[i+1]].y;
+		dist = hypot(dx, dy);
+		// printf("Nail %3u to %3u\n", pointList[i], pointList[i+1]);
+		// printf("    diffXY %5.1f, %5.1f\n", dx, dy);
+		// printf("    dist %5.1f\n", dist);
+		totalLength += dist;
+	}
+	// printf("totalLength %5.1f\n", totalLength);
+	return totalLength;
+}

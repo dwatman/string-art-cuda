@@ -32,8 +32,9 @@ int main(int argc, char* argv[]) {
 	float lineRatio;
 	double imageError;
 
-point_t nails[NUM_NAILS];
-int pointList[NUM_LINES+1];
+	point_t nails[NUM_NAILS];
+	int pointList[NUM_LINES+1];
+	double totalLength;
 
 	printf("Start\n");
 
@@ -146,6 +147,12 @@ int pointList[NUM_LINES+1];
 		// Compute error between original and generated images
 		imageError = GpucalculateImageError(&gpuData);
 		printf("#%i imageError: %f", i, imageError);
+
+		totalLength = CalcTotalLength(pointList, nails);
+		printf("  length  %5.1f", totalLength);
+
+		imageError /= totalLength;
+		printf("  (%f)", imageError);
 
 		if (imageError < bestError) {
 			bestError = imageError;

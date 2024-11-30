@@ -32,5 +32,6 @@ void ResetConnections(void);
 void SetConnection(int i, int j);
 void ClearConnection(int i, int j);
 int IsConnected(int i, int j);
+double CalcTotalLength(const int *pointList, const point_t *nails);
 
 #endif
