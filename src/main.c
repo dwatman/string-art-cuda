@@ -97,10 +97,9 @@ int main(int argc, char* argv[]) {
 	memset(h_weights, 255, widthIn*heightIn*sizeof(uint8_t));
 
 	// Clear areas outside the border of nails with black to ignore it
-	// TODO: Fix for input size
 	for (j=0; j<heightIn; j++) {
 		for (i=0; i<widthIn; i++) {
-			if (inside_poly(nails, NUM_NAILS, i*4, j*4) == 0)
+			if (inside_poly(nails, NUM_NAILS, i*(DATA_SIZE/widthIn), j*(DATA_SIZE/heightIn)) == 0)
 				h_weights[j*widthIn + i] = 0;
 		}
 	}
