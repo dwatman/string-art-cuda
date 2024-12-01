@@ -34,9 +34,9 @@ int ValidateNextNail(int first, int next, int thresh) {
 	diff_min = diff_direct < diff_wrap ? diff_direct : diff_wrap;
 
 	if ((diff_min <= thresh) || IsConnected(first, next))
-		return 0;
+		return 0; // Not valid
 	else
-		return 1;
+		return 1; // Valid
 }
 
 // Calculate line parameters from from two points

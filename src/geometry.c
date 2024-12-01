@@ -223,7 +223,7 @@ void CalcLineCoverage(float *map, float lineWidth) {
 
 // Generate a random (but valid) list of points, and calculate line parameters
 // TODO: separate line calculation?
-int GenerateRandomPattern(line_t *lines, int *pointList, point_t *nails) {
+int GenerateRandomPattern(line_t *lines, int *pointList, const point_t *nails) {
 	point_t p0, p1;
 	int n0, n1;
 	int i;
@@ -262,7 +262,7 @@ int GenerateRandomPattern(line_t *lines, int *pointList, point_t *nails) {
 		p1.y = nails[pointList[i+1]].y;
 		lines[i] = PointsToLine(p0, p1);
 
-		//printf("Nail %3u to %3u\n", pointList[i], pointList[i+1]);
+		printf("step #%i %3u to %3u\n", i, pointList[i], pointList[i+1]);
 		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
 		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
 	}
@@ -276,5 +276,84 @@ int GenerateRandomPattern(line_t *lines, int *pointList, point_t *nails) {
 	// for (i=0; i<=NUM_LINES; i++) {
 	// 	printf("Point %3u = %3u\n", i, pointList[i]);
 	// }
+	return 0;
+}
+
+// Ensure an index is between 0 and NUM_NAILS
+static int FixNailIndex(int p) {
+	if (p < 0) return p + NUM_NAILS;
+	if (p >= NUM_NAILS) return p - NUM_LINES;
+	return p;
+}
+
+// Move the line(s) at a nail to another vaild nail within maxDist
+int MovePattern(line_t *lines, int *pointList, const point_t *nails, int maxDist) {
+	int pointFrom, pointTo;
+	int changeDist;
+	int i;
+
+	printf("        ");
+	for (i=0; i<=NUM_LINES; i++)
+		printf("%2i ", i);
+	printf("\npoints: ");
+	for (i=0; i<=NUM_LINES; i++)
+		printf("%2i ", pointList[i]);
+	printf("\n");
+
+	// Select a point to move
+	pointFrom = rand() % (NUM_LINES+1);
+
+	// Decide how far to move the point (1 to maxDist)
+	changeDist = 1 + rand() % maxDist;
+
+	// Choose sign
+	if (rand() % 2) changeDist *= -1;
+
+	pointTo = FixNailIndex(pointList[pointFrom] + changeDist);
+
+	printf("point #%i from %i by %+i to %i\n", pointFrom, pointList[pointFrom], changeDist, pointTo);
+	printf("nail %i to %i\n", pointList[pointFrom], pointTo);
+
+	if (pointFrom == 0) {
+		printf("FIRST\n");
+		printf("line %i to %i -> ", pointList[0], pointList[1]);
+		printf("line %i to %i\n", pointTo, pointList[1]);
+
+		if (ValidateNextNail(pointTo, pointList[1], MIN_LINE_DIST) == 0)
+			printf("INVALID\n");
+		else
+			printf("VALID\n");
+	}
+	else if (pointFrom == NUM_LINES) {
+		printf("LAST\n");
+		printf("line %i to %i -> ", pointList[NUM_LINES-1], pointList[NUM_LINES]);
+		printf("line %i to %i\n", pointList[NUM_LINES-1], pointTo);
+
+		if (ValidateNextNail(pointList[NUM_LINES-1], pointTo, MIN_LINE_DIST) == 0)
+			printf("INVALID\n");
+		else
+			printf("VALID\n");
+	}
+	else {
+		printf("MID\n");
+		printf("line %i to %i -> ", pointList[pointFrom-1], pointList[pointFrom]);
+		printf("line %i to %i\n", pointList[pointFrom-1], pointTo);
+
+		if (ValidateNextNail(pointList[pointFrom-1], pointTo, MIN_LINE_DIST) == 0)
+			printf("INVALID\n");
+		else
+			printf("VALID\n");
+
+		printf("line %i to %i -> ", pointList[pointFrom], pointList[pointFrom+1]);
+		printf("line %i to %i\n", pointTo, pointList[pointFrom+1]);
+
+		if (ValidateNextNail(pointTo, pointList[pointFrom+1], MIN_LINE_DIST) == 0)
+			printf("INVALID\n");
+		else
+			printf("VALID\n");
+	}
+
+
+
 	return 0;
 }

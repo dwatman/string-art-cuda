@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 
 	double bestError = 10000000.0;
 
-	for (i=0; i<10; i++) {
+	for (i=0; i<1; i++) {
 
 		// Generate an initial random line pattern
 		err = GenerateRandomPattern(lines, pointList, nails);
@@ -162,6 +162,9 @@ int main(int argc, char* argv[]) {
 		CUDA_CHECK(cudaDeviceSynchronize());
 	}
 	printf("bestError: %f\n", bestError);
+
+	MovePattern(lines, pointList, nails, 4);
+
 
 	// // Convert the image to uint and write to CPU buffer
 	// GpuOutConvert(h_imageOut, &gpuData);
