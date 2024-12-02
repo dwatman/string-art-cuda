@@ -54,6 +54,21 @@ line_t PointsToLine(point_t p1, point_t p2) {
 	return line;
 }
 
+void CalcLineParams(line_t *lines, const int *pointList, const point_t *nails, int pointIndex) {
+	point_t p0, p1;
+
+	// Make sure the index is valid
+	if ((pointIndex < 0) || (pointIndex > NUM_LINES))
+		return;
+
+	p0.x = nails[pointList[pointIndex]].x;
+	p0.y = nails[pointList[pointIndex]].y;
+	p1.x = nails[pointList[pointIndex+1]].x;
+	p1.y = nails[pointList[pointIndex+1]].y;
+
+	lines[pointIndex] = PointsToLine(p0, p1);
+}
+
 // Calculate line parameters from from a distance and an angle
 line_t DistAngleToLine(float dist, float angle) {
 	line_t line;
