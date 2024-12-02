@@ -3,9 +3,6 @@
 #include "util.h"
 #include "settings.h"
 
-// Bit array to track which nails are connected by lines
-static uint64_t connections[LINE_BIT_ARRAY_SIZE] = {0};
-
 // Initialise nail positions in a cirlce (for now)
 void InitNailPositions(point_t *nails, int numNails) {
 	float x, y;
@@ -26,14 +23,14 @@ void InitNailPositions(point_t *nails, int numNails) {
 
 // Check if the next proposed nail position is valid
 // Prevents short connections and repeated lines
-int ValidateNextNail(int first, int next, int thresh) {
+int ValidateNextNail(int first, int next, int thresh, uint64_t *connections) {
 	int diff_direct, diff_wrap, diff_min;
 
 	diff_direct = abs(next - first);
 	diff_wrap = NUM_NAILS - diff_direct;
 	diff_min = diff_direct < diff_wrap ? diff_direct : diff_wrap;
 
-	if ((diff_min <= thresh) || IsConnected(first, next))
+	if ((diff_min <= thresh) || IsConnected(first, next, connections))
 		return 0; // Not valid
 	else
 		return 1; // Valid
@@ -90,7 +87,7 @@ static inline int get_bit_index(int i, int j) {
 }
 
 // Clear all recorded connections, and preset invalid links
-void ResetConnections(void) {
+void ResetConnections(uint64_t *connections) {
 	int i;
 
 	// Clear all connections
@@ -99,11 +96,11 @@ void ResetConnections(void) {
 
 	// Set points as connected to themselves
 	for (i=0; i<NUM_NAILS; i++)
-		SetConnection(i, i);
+		SetConnection(i, i, connections);
 }
 
 // Mark a connection (in both directions)
-void SetConnection(int i, int j) {
+void SetConnection(int i, int j, uint64_t *connections) {
 	// Prevent out of array access
 	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
 		return;
@@ -118,7 +115,7 @@ void SetConnection(int i, int j) {
 }
 
 // Clear a connection (in both directions)
-void ClearConnection(int i, int j) {
+void ClearConnection(int i, int j, uint64_t *connections) {
 	// Prevent out-of-array access
 	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
 		return;
@@ -133,7 +130,7 @@ void ClearConnection(int i, int j) {
 }
 
 // Check if two nails are connected
-int IsConnected(int i, int j) {
+int IsConnected(int i, int j, uint64_t *connections) {
 	// Prevent out of array access
 	if ((i >= NUM_NAILS) || (j >= NUM_NAILS))
 		return 1; // Say out of range points are connected

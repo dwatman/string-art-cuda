@@ -19,12 +19,11 @@ uint8_t *h_imageIn = NULL;
 uint8_t *h_weights = NULL;
 uint8_t *h_imageOut = NULL;
 float   *h_lineCoverage = NULL;
-line_t *lines = NULL;
 
 // GPU buffers
 gpuData_t gpuData;
 
-char filenameInput[] = "test_line.png";
+char filenameInput[] = "test.png";
 
 int main(int argc, char* argv[]) {
 	int err;
@@ -34,7 +33,15 @@ int main(int argc, char* argv[]) {
 
 	point_t nails[NUM_NAILS];
 	int pointList[NUM_LINES+1];
+	line_t lines[NUM_LINES];
+	uint64_t connections[LINE_BIT_ARRAY_SIZE]; // Bit array to track which nails are connected by lines
 	double totalLength;
+
+	// Storage for best result
+	int bestPoints[NUM_LINES+1];
+	line_t bestLines[NUM_LINES];
+	uint64_t bestConnections[LINE_BIT_ARRAY_SIZE];
+	double bestError;
 
 	printf("Start\n");
 
@@ -86,9 +93,6 @@ int main(int argc, char* argv[]) {
 	// 	printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
 	// }
 
-	// Allocate CPU buffer for lines
-	lines = (line_t *)malloc(NUM_LINES*sizeof(line_t));
-
 	// Create a mask, not pinned (TODO: optionally load from image)
 	// check cleanup order
 	h_weights = malloc(widthIn*heightIn*sizeof(uint8_t));
@@ -126,19 +130,29 @@ int main(int argc, char* argv[]) {
 	srand(time(NULL));   // Initialise RNG
 	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
-	double bestError = 10000000.0;
+	// Generate an initial random line pattern
+	err = GenerateRandomPattern(bestConnections, bestLines, bestPoints, nails);
+	if (err) return -3;
 
-	for (i=0; i<1; i++) {
 
-		// Generate an initial random line pattern
-		err = GenerateRandomPattern(lines, pointList, nails);
-		if (err) return -3;
+	bestError = 10000000.0;
+
+	for (i=0; i<1000; i++) {
+		// Start with the best result
+		memcpy(pointList, bestPoints, (NUM_LINES+1)*sizeof(int));
+		memcpy(lines, bestLines, NUM_LINES*sizeof(line_t));
+		memcpy(connections, bestConnections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
+
+		// Move some points around
+		MovePattern(connections, lines, pointList, nails, 4);
+		MovePattern(connections, lines, pointList, nails, 4);
+		MovePattern(connections, lines, pointList, nails, 4);
+		MovePattern(connections, lines, pointList, nails, 4);
+		MovePattern(connections, lines, pointList, nails, 4);
+
 
 		// Copy line data to GPU memory
 		GpuLoadLines(&gpuData, lines);
-
-		// Clear accumulator buffer ****NOT NEEDED?
-		//ClearAccumBuffer(&gpuData);
 
 		// Draw the set of lines in the GPU image buffer
 		GpuDrawLines(&gpuData);
@@ -150,24 +164,25 @@ int main(int argc, char* argv[]) {
 		totalLength = CalcTotalLength(pointList, nails);
 		printf("  length  %5.1f", totalLength);
 
+		// Divide error by total line length to reduce bias for short connections
 		imageError /= totalLength;
 		printf("  (%f)", imageError);
 
 		if (imageError < bestError) {
 			bestError = imageError;
-			GpuOutConvert(h_imageOut, &gpuData);
+			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
+
+			// Update best pattern
+			memcpy(bestPoints, pointList, (NUM_LINES+1)*sizeof(int));
+			memcpy(bestLines, lines, NUM_LINES*sizeof(line_t));
+			memcpy(bestConnections, connections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
+
 			printf("  (best)");
 		}
 		printf("\n");
 		CUDA_CHECK(cudaDeviceSynchronize());
 	}
 	printf("bestError: %f\n", bestError);
-
-	MovePattern(lines, pointList, nails, 4);
-
-
-	// // Convert the image to uint and write to CPU buffer
-	// GpuOutConvert(h_imageOut, &gpuData);
 
 	// Clear areas outside the border of nails
 	for (j=0; j<DATA_SIZE; j++) {
@@ -189,8 +204,6 @@ void cleanup(void) {
 	printf("Cleaning up main...\n");
 
 	FreePinnedBuffers();
-
-	if (lines != NULL) free(lines);
 
 	printf("Cleanup main done\n");
 }
