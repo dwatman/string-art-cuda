@@ -2,6 +2,7 @@
 #define __UTIL_H__
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <math.h>
 
 // 2D point coordinate
@@ -25,12 +26,14 @@ typedef struct {
 } line_t;
 
 void InitNailPositions(point_t *nails, int numNails);
-int ValidateNextNail(int first, int next, int thresh);
+int ValidateNextNail(int first, int next, int thresh, uint64_t *connections);
 line_t PointsToLine(point_t p1, point_t p2);
+void CalcLineParams(line_t *lines, const int *pointList, const point_t *nails, int pointIndex);
 line_t DistAngleToLine(float dist, float angle);
-void ResetConnections(void);
-void SetConnection(int i, int j);
-void ClearConnection(int i, int j);
-int IsConnected(int i, int j);
+void ResetConnections(uint64_t *connections);
+void SetConnection(int i, int j, uint64_t *connections);
+void ClearConnection(int i, int j, uint64_t *connections);
+int IsConnected(int i, int j, uint64_t *connections);
+double CalcTotalLength(const int *pointList, const point_t *nails);
 
 #endif
