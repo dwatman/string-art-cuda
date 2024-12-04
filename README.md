@@ -71,8 +71,8 @@ The project is in a very early stage - more information will be added as develop
 - [x] Calculation of pixel coverage by lines of given width
 - [x] Connection validation to prevent short/repeated lines
 - [x] Basic drawing of many lines on GPU
-- [ ] Efficient drawing of many lines on GPU
-- [ ] GPU accelerated fitness function calculation
+- [x] Efficient drawing of many lines on GPU
+- [x] GPU accelerated fitness function calculation
 - [ ] Speed optimisation of fitness function (GPU)
 - [ ] Simulated annealing algorithm implementation (CPU)
 - [ ] Tuning of simulated annealing algorithm
@@ -88,3 +88,16 @@ The project is in a very early stage - more information will be added as develop
 * Currently the nail positions are fixed in a circle (will be changed later)
 * It's going to be slow (no idea how slow until basic full functionality is done)
 * No useful output until the optimisation stage is working
+
+## Performance Tests ##
+
+NVIDIA GeForce RTX 3080 Ti
+
+300 nails
+5000 lines
+1024x1024 output image
+
+DrawLine_kernel (GPU) duration (99.8% of the run time)
+
+* 2024/12/04 23.0 ms
+

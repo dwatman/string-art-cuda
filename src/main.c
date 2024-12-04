@@ -127,8 +127,8 @@ int main(int argc, char* argv[]) {
 	InitCoverageTexture(&gpuData);
 
 
-	srand(time(NULL));   // Initialise RNG
-	//srand(1234567);   // Initialise RNG to fixed seed for testing
+	//srand(time(NULL));   // Initialise RNG
+	srand(1234567);   // Initialise RNG to fixed seed for testing
 
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, bestLines, bestPoints, nails);
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
 
 	bestError = 10000000.0;
 
-	for (i=0; i<1000; i++) {
+	for (i=0; i<3; i++) {
 		// Start with the best result
 		memcpy(pointList, bestPoints, (NUM_LINES+1)*sizeof(int));
 		memcpy(lines, bestLines, NUM_LINES*sizeof(line_t));

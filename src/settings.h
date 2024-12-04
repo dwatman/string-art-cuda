@@ -2,11 +2,11 @@
 #define __SETTINGS_H__
 
 // Nail and line counts
-#define NUM_NAILS 12
-#define NUM_LINES 4
+#define NUM_NAILS 300
+#define NUM_LINES 5000
 
 // String parameters
-#define STRING_THICKNESS 2.5f // Thickness of the string in pixels (float)
+#define STRING_THICKNESS 0.25f // Thickness of the string in pixels (float)
 
 // Settings for finding the next nail
 #define MIN_LINE_DIST 2 // Minimum interval between nails that a line is allowed

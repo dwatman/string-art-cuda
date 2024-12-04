@@ -85,8 +85,8 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 // Copy line data to GPU
 void GpuLoadLines(gpuData_t *gpuData, line_t *lines) {
 
-	CUDA_CHECK(cudaMemcpy(gpuData->lineData, lines, NUM_LINES*4*sizeof(float), cudaMemcpyHostToDevice));
-	//CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData, lines, NUM_LINES*4*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 // Compute the perpendicular distance from the pixel (x0, y0) to the line Ax + By + C = 0
@@ -258,8 +258,7 @@ double GpucalculateImageError(gpuData_t *gpuData) {
 	size_t numBlocks = gridSize.x*gridSize.y;
 
 	// Clear the total sum in GPU memory
-	CUDA_CHECK(cudaMemset(gpuData->sumResult, 0, sizeof(double)));
-	CUDA_CHECK(cudaDeviceSynchronize());//??
+	CUDA_CHECK(cudaMemsetAsync(gpuData->sumResult, 0, sizeof(double), gpuData->stream));
 
 	// Launch the first kernel to compute block partial sums
 	sharedMemSize = SUM_BLOCK_SIZE*SUM_BLOCK_SIZE*sizeof(double);

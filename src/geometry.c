@@ -258,7 +258,7 @@ int GenerateRandomPattern(uint64_t *connections, line_t *lines, int *pointList, 
 
 		CalcLineParams(lines, pointList, nails, i);
 
-		printf("step #%i %3u to %3u\n", i, pointList[i], pointList[i+1]);
+		//printf("step #%i %3u to %3u\n", i, pointList[i], pointList[i+1]);
 		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
 		//printf(" -> %f %f %f (%f)\n", lines[i].A, lines[i].B, lines[i].C, lines[i].inv_denom);
 	}
