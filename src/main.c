@@ -123,9 +123,6 @@ int main(int argc, char* argv[]) {
 	// Copy the coverage data to GPU memory
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);
 
-	// Map the coverage data to a texture for fast lookup
-	InitCoverageTexture(&gpuData);
-
 
 	//srand(time(NULL));   // Initialise RNG
 	srand(1234567);   // Initialise RNG to fixed seed for testing

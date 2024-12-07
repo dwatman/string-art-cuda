@@ -49,11 +49,11 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	printf("pitch Accum:     %5lu (%lu) at %p\n", gpuData->pitchAccum, 	gpuData->srcWidth*sizeof(float), gpuData->imgAccum);
 	printf("pitch output:    %5lu (%lu) at %p\n", gpuData->pitchOutput, gpuData->srcWidth*sizeof(uint8_t), gpuData->imgOut);
 
-	// Memory for 2D texture
+	// Memory for line coverage data
 	CUDA_CHECK(cudaMallocPitch(&gpuData->lineCoverage, &gpuData->pitchCoverage,
-							LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES));
+							LINE_TEX_DIST_SAMPLES*sizeof(float), LINE_TEX_ANGLE_SAMPLES));
 
-	printf("pitch lineCoverage: %5lu (%lu) at %p\n", gpuData->pitchCoverage, LINE_TEX_ANGLE_SAMPLES*sizeof(float), gpuData->lineCoverage);
+	printf("pitch lineCoverage: %5lu (%lu) at %p\n", gpuData->pitchCoverage, LINE_TEX_DIST_SAMPLES*sizeof(float), gpuData->lineCoverage);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -65,7 +65,6 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	printf("GpuFreeBuffers\n");
 
 	CUDA_CHECK(cudaStreamDestroy(gpuData->stream));
-	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texCoverage));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texImageIn));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texWeights));
 
@@ -109,9 +108,10 @@ __device__ float compute_angle(float A, float B) {
 
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const cudaTextureObject_t tex) {
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const float *coverage, size_t coveragePitch) {
 	float A, B, C, inv_denom;
 	float dist, angle;
+	int distIndex, angleIndex;
 	float maxDist;
 	float value;
 	int line;
@@ -125,8 +125,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 	// Calculate the maximum distance at which the line overlaps a pixel
 	maxDist = sqrtf(2)/2 + lineThickness/2;
 
+	value = 1.0f;
 	if ((i<width) && (j<height)) {
-		value = 1.0f;
 
 		for (line=0; line<NUM_LINES; line++) {
 			// Get line parameters (format Ax + By + C = 0)
@@ -137,11 +137,15 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 			inv_denom = lineData[4*line + 3];
 
 			// Calculate distance and angle for calculating partial coverage
-			dist = compute_distance(i, j, A, B, C, inv_denom);
-			angle = compute_angle(A, B);
+			dist = compute_distance(i, j, A, B, C, inv_denom); 	// Range 0 to +inf
+			angle = compute_angle(A, B); 						// Range 0 to pi
+
+			// Calculate index in the precalculated table
+			distIndex = roundf(min(1.0f, dist/maxDist)*(LINE_TEX_DIST_SAMPLES-1));
+			angleIndex = roundf(angle/(float)M_PI)*(LINE_TEX_ANGLE_SAMPLES-1);
 
 			// Look up the coverage at this pixel and accumulate it to the total
-			value *= (1.0f - tex2D<float>(tex, angle, dist/maxDist));
+			value *= 1.0f - coverage[angleIndex*coveragePitch + distIndex];
 		}
 
 		// Convert and store value into output array
@@ -163,7 +167,8 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						1);
 
 	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
-																width, height, gpuData->lineData, STRING_THICKNESS, gpuData->texCoverage);
+																width, height, gpuData->lineData, STRING_THICKNESS,
+																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }

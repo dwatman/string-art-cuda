@@ -21,7 +21,6 @@ typedef struct {
 	double *partialSums;			// Block sums of error
 	double *sumResult;				// Total error
 	// TEXTURES
-	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
 	cudaTextureObject_t texImageIn;  // Texture for input image
 	cudaTextureObject_t texWeights;  // Texture for image weights
 	// PITCH FOR IMAGE BUFFERS

@@ -202,10 +202,10 @@ void CalcLineCoverage(float *map, float lineWidth) {
 	}
 
 	maxval = 0;
-	for (j=0; j<LINE_TEX_DIST_SAMPLES; j++) {
-		for (i=0; i<LINE_TEX_ANGLE_SAMPLES; i++) {
-			angle = ((float)i/LINE_TEX_ANGLE_SAMPLES)*maxAngle;
-			dist = ((float)j/LINE_TEX_DIST_SAMPLES)*maxDist;
+	for (j=0; j<LINE_TEX_ANGLE_SAMPLES; j++) {
+		for (i=0; i<LINE_TEX_DIST_SAMPLES; i++) {
+			dist = ((float)i/LINE_TEX_DIST_SAMPLES)*maxDist;
+			angle = ((float)j/LINE_TEX_ANGLE_SAMPLES)*maxAngle;
 
 			//printf("d %f, a %f\n", dist, angle);
 			line = DistAngleToLine(dist, angle);
@@ -214,7 +214,7 @@ void CalcLineCoverage(float *map, float lineWidth) {
 			// Keep track of the maximum value
 			if (area > maxval) maxval = area;
 
-			map[LINE_TEX_ANGLE_SAMPLES*j + i] = area;
+			map[LINE_TEX_DIST_SAMPLES*j + i] = area;
 		}
 	}
 	printf("maxval %f\n", maxval);
