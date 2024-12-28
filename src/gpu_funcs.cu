@@ -109,8 +109,6 @@ __device__ float compute_angle(float A, float B) {
 // (GPU) Draw many lines
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const float *coverage, size_t coveragePitch) {
-	__shared__ float shcov[LINE_TEX_DIST_SAMPLES*LINE_TEX_ANGLE_SAMPLES];
-
 	float A, B, C, inv_denom;
 	float dist, angle;
 	int distIndex, angleIndex;
@@ -118,21 +116,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 	float value;
 	int line;
 
-	int i,j;
-
-	if ((threadIdx.x==0) && (threadIdx.y==0)) {
-		for (j=0; j<LINE_TEX_ANGLE_SAMPLES; j++) {
-			for (i=0; i<LINE_TEX_DIST_SAMPLES; i++) {
-				shcov[j*LINE_TEX_DIST_SAMPLES + i] = coverage[j*coveragePitch + i];
-			}
-		}
-	}
-	__syncthreads();
-
-
-	i = blockIdx.x * blockDim.x + threadIdx.x;
-	j = blockIdx.y * blockDim.y + threadIdx.y;
-
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// Flip vertically
 	//int j_flip = height-1 - j;
@@ -160,8 +145,7 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 			angleIndex = roundf(angle/(float)M_PI)*(LINE_TEX_ANGLE_SAMPLES-1);
 
 			// Look up the coverage at this pixel and accumulate it to the total
-			//value *= 1.0f - coverage[angleIndex*coveragePitch + distIndex];
-			value *= 1.0f - shcov[angleIndex*LINE_TEX_DIST_SAMPLES + distIndex];
+			value *= 1.0f - coverage[angleIndex*coveragePitch + distIndex];
 		}
 
 		// Convert and store value into output array
