@@ -95,9 +95,9 @@ NVIDIA GeForce RTX 3080 Ti
 
 300 nails
 5000 lines
-1024x1024 output image
+512x512 output image
 
 DrawLine_kernel (GPU) duration (99.8% of the run time)
 
-* 2024/12/04 Nsight Systems 23.0 ms | Nsight Compute 30.53 ms
-
+* 2024/12/04 Nsight Compute 11.54 ms
+* 2024/12/07 Nsight Compute 10.60 ms (line coverage data in shared memory)
