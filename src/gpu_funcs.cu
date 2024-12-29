@@ -88,24 +88,6 @@ void GpuLoadLines(gpuData_t *gpuData, line_t *lines) {
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-// Compute the perpendicular distance from the pixel (x0, y0) to the line Ax + By + C = 0
-__device__ float compute_distance(float x0, float y0, float A, float B, float C, float inv_denom) {
-	float numerator = fabsf(fmaf(A, x0, fmaf(B, y0, C)));  // |Ax0 + By0 + C| using fmaf for fused multiply-add
-	return numerator * inv_denom;  // Multiply instead of divide
-}
-
-// Compute the angle of the line Ax + By + C = 0 relative to the x-axis
-// Angle returned is in the range 0 to pi
-__device__ float compute_angle(float A, float B) {
-	// Calculate the angle in radians with respect to the x-axis
-	float angle = atan2f(-A, B); // atan2(-A, B) ensures the correct quadrant
-
-	// Convert the angle to the range [0, π] if necessary
-	if (angle < 0) angle += (float)M_PI;
-
-	return angle;
-}
-
 // (GPU) Draw many lines
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, int numLines, const float *coverage, size_t coveragePitch) {
@@ -172,7 +154,10 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 				if (inv_denom == 0.0f) continue;
 
 				// Compute distance (distance is per-pixel, angle is precomputed per-line)
-				float dist = fabsf(A * i + B * j + C) * inv_denom;
+				float dist = fabsf(A*i + B*j + C) * inv_denom;
+
+				// Skip calculation if lines will not contribute to the image
+				if (dist > MAX_DIST) continue;
 
 				// Calculate indices for coverage lookup
 				int distIndex = fminf(LINE_TEX_DIST_SAMPLES - 1, (int)(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1)));

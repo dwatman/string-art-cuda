@@ -64,6 +64,8 @@ int main(int argc, char* argv[]) {
 	}
 	printf("\n");
 
+	printf("MAX_DIST: %f\n", MAX_DIST);
+
 	int widthIn, heightIn;
 	// Load input image
 	err = load_greyscale_png(filenameInput, &h_imageIn, &widthIn, &heightIn);
@@ -83,7 +85,7 @@ int main(int argc, char* argv[]) {
 
 	// Allocate global buffers
 	atexit(cleanup); // set cleanup function for CPU memory
-	InitPinnedBuffers(&gpuData);heightIn*sizeof(uint8_t);
+	InitPinnedBuffers(&gpuData);
 
 
 	// Set nail positions in a circle (for now)

@@ -99,6 +99,7 @@ NVIDIA GeForce RTX 3080 Ti
 
 DrawLine_kernel (GPU) duration (99.8% of the run time)
 
-* 2024/12/04 Nsight Compute 11.54 ms
+* 2024/12/04 Nsight Compute 11.54 ms (initial implementation)
 * 2024/12/07 Nsight Compute 10.60 ms (line coverage data in shared memory)
 * 2024/12/29 Nsight Compute  5.85 ms (lines in shared memory, processed in batches)
+* 2024/12/29 Nsight Compute  1.89 ms (skip unnecessary calculations)
