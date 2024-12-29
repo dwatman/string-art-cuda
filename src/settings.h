@@ -7,6 +7,7 @@
 
 // String parameters
 #define STRING_THICKNESS 0.25f // Thickness of the string in pixels (float)
+#define MAX_DIST (sqrtf(2)/2 + STRING_THICKNESS/2)
 
 // Settings for finding the next nail
 #define MIN_LINE_DIST 2 // Minimum interval between nails that a line is allowed

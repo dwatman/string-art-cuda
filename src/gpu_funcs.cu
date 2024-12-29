@@ -108,48 +108,86 @@ __device__ float compute_angle(float A, float B) {
 
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const float *coverage, size_t coveragePitch) {
-	float A, B, C, inv_denom;
-	float dist, angle;
-	int distIndex, angleIndex;
-	float maxDist;
-	float value;
-	int line;
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, int numLines, const float *coverage, size_t coveragePitch) {
+	// Shared memory for storing the coverage array and line parameters per block
+	extern __shared__ float sharedMemory[];
+	float *sharedCoverage = sharedMemory;
+	float (*sharedLineParams)[5] = (float (*)[5])(sharedMemory + LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES);
 
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+	int bx = blockIdx.x * blockDim.x;
+	int by = blockIdx.y * blockDim.y;
 
-	// Flip vertically
-	//int j_flip = height-1 - j;
+	int i = bx + tx;
+	int j = by + ty;
 
-	// Calculate the maximum distance at which the line overlaps a pixel
-	maxDist = sqrtf(2)/2 + lineThickness/2;
+	// Thread's contribution to the output
+	float pixelValue = 1.0f;
 
-	value = 1.0f;
-	if ((i<width) && (j<height)) {
-
-		for (line=0; line<NUM_LINES; line++) {
-			// Get line parameters (format Ax + By + C = 0)
-			// The parameter 1/sqrt(A^2 + B^2) is also precalculated
-			A = lineData[4*line + 0];
-			B = lineData[4*line + 1];
-			C = lineData[4*line + 2];
-			inv_denom = lineData[4*line + 3];
-
-			// Calculate distance and angle for calculating partial coverage
-			dist = compute_distance(i, j, A, B, C, inv_denom); 	// Range 0 to +inf
-			angle = compute_angle(A, B); 						// Range 0 to pi
-
-			// Calculate index in the precalculated table
-			distIndex = roundf(min(1.0f, dist/maxDist)*(LINE_TEX_DIST_SAMPLES-1));
-			angleIndex = roundf(angle/(float)M_PI)*(LINE_TEX_ANGLE_SAMPLES-1);
-
-			// Look up the coverage at this pixel and accumulate it to the total
-			value *= 1.0f - coverage[angleIndex*coveragePitch + distIndex];
+	// Copy coverage array into shared memory
+	for (int idx = ty * blockDim.x + tx; idx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES; idx += blockDim.x * blockDim.y) {
+		if (idx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES) { // Bounds checking
+			int angleIndex = idx / LINE_TEX_DIST_SAMPLES;
+			int distIndex = idx % LINE_TEX_DIST_SAMPLES;
+			sharedCoverage[idx] = coverage[angleIndex * coveragePitch + distIndex];
 		}
+	}
+	__syncthreads();
 
-		// Convert and store value into output array
-		dataDst[j*pitchDst + i] = value;
+	// Process lines in chunks of 64
+	for (int lineChunkStart = 0; lineChunkStart < numLines; lineChunkStart += 64) {
+		int localLineIdx = ty * blockDim.x + tx;
+
+		// Each thread loads a line parameter set into shared memory (if within bounds)
+		if (localLineIdx < 64 && (lineChunkStart + localLineIdx) < numLines) {
+			for (int k = 0; k < 4; ++k) {
+				sharedLineParams[localLineIdx][k] = lineData[(lineChunkStart + localLineIdx) * 4 + k];
+			}
+			// Precompute angle and store it as the 5th parameter
+			float A = sharedLineParams[localLineIdx][0];
+			float B = sharedLineParams[localLineIdx][1];
+			// Calculate the angle in radians with respect to the x-axis
+			float angle = atan2f(-A, B);
+			// Convert the angle to the range [0, PI] if necessary
+			if (angle < 0) angle += (float)M_PI;
+			sharedLineParams[localLineIdx][4] = angle;
+		}
+		__syncthreads();
+
+
+		// Calculate pixel contribution for the loaded lines
+		if (i < width && j < height) {
+			for (int lineIdx = 0; lineIdx < 64; ++lineIdx) {
+				if (lineChunkStart + lineIdx >= numLines) break;
+
+				// Extract line parameters
+				float A = sharedLineParams[lineIdx][0];
+				float B = sharedLineParams[lineIdx][1];
+				float C = sharedLineParams[lineIdx][2];
+				float inv_denom = sharedLineParams[lineIdx][3];
+				float angle = sharedLineParams[lineIdx][4];
+
+				// Validate inv_denom to prevent undefined behavior
+				if (inv_denom == 0.0f) continue;
+
+				// Compute distance (distance is per-pixel, angle is precomputed per-line)
+				float dist = fabsf(A * i + B * j + C) * inv_denom;
+
+				// Calculate indices for coverage lookup
+				int distIndex = fminf(LINE_TEX_DIST_SAMPLES - 1, (int)(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1)));
+				int angleIndex = fminf(LINE_TEX_ANGLE_SAMPLES - 1, (int)(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1)));
+
+				// Accumulate coverage contribution
+				pixelValue *= 1.0f - sharedCoverage[angleIndex * LINE_TEX_DIST_SAMPLES + distIndex];
+			}
+		}
+		__syncthreads();
+	}
+
+	// Store final pixel value to output
+	if (i < width && j < height) {
+		dataDst[j * pitchDst + i] = pixelValue;
 	}
 }
 
@@ -166,8 +204,11 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						ceil(height/(float)blockSize.y),
 						1);
 
-	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
-																width, height, gpuData->lineData, STRING_THICKNESS,
+	// Calculate required shared memory
+	int smem_size = (LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES+64*5)*4; // Bytes
+
+	DrawLine_kernel<<<gridSize, blockSize, smem_size, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
+																width, height, gpuData->lineData, NUM_LINES,
 																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
