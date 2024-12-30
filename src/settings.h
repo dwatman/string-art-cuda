@@ -20,6 +20,9 @@
 #define LINE_TEX_DIST_SAMPLES 32
 #define LINE_TEX_ANGLE_SAMPLES 32
 
+// Number of lines to process in each chunk
+#define LINE_CHUNK_SIZE 256
+
 // Block size for error summing (only 16 or 32)
 #define SUM_BLOCK_SIZE 16
 

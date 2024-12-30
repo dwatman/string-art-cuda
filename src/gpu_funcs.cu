@@ -102,9 +102,9 @@ void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList) {
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch) {
 	// Shared memory for storing the coverage array and line parameters per block
-	extern __shared__ float sharedMemory[];
-	float *sharedCoverage = sharedMemory;
-	float (*sharedLineParams)[5] = (float (*)[5])(sharedMemory + LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES);
+	__shared__ float sharedCoverage[LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES];
+	__shared__ float sharedLineParams[LINE_CHUNK_SIZE][4];
+	__shared__ uint8_t sharedAngleIndex[LINE_CHUNK_SIZE];
 
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
@@ -128,31 +128,31 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 	}
 	__syncthreads();
 
-	// Process lines in chunks of 64
-	for (int lineChunkStart = 0; lineChunkStart < NUM_LINES; lineChunkStart += 64) {
+	// Process lines in chunks of LINE_CHUNK_SIZE
+	for (int lineChunkStart = 0; lineChunkStart < NUM_LINES; lineChunkStart += LINE_CHUNK_SIZE) {
 		int localLineIdx = ty * blockDim.x + tx;
 
 		// Each thread loads a line parameter set into shared memory (if within bounds)
-		if (localLineIdx < 64 && (lineChunkStart + localLineIdx) < NUM_LINES) {
+		if (localLineIdx < LINE_CHUNK_SIZE && (lineChunkStart + localLineIdx) < NUM_LINES) {
 			sharedLineParams[localLineIdx][0] = lineA[lineChunkStart + localLineIdx];
 			sharedLineParams[localLineIdx][1] = lineB[lineChunkStart + localLineIdx];
 			sharedLineParams[localLineIdx][2] = lineC[lineChunkStart + localLineIdx];
 			sharedLineParams[localLineIdx][3] = lineInvDenom[lineChunkStart + localLineIdx];
 
-			// Precompute angle and store it as the 5th parameter
+			// Precompute angle index and store it for reuse
 			float A = sharedLineParams[localLineIdx][0];
 			float B = sharedLineParams[localLineIdx][1];
-			// Calculate the angle in radians with respect to the x-axis
-			float angle = atan2f(-A, B);
-			// Convert the angle to the range [0, PI] if necessary
-			if (angle < 0) angle += (float)M_PI;
-			sharedLineParams[localLineIdx][4] = angle;
+
+			float angle = atan2f(-A, B); 			// Calculate the angle in radians with respect to the x-axis
+			if (angle < 0) angle += (float)M_PI; 	// Convert the angle to the range [0, PI] if necessary
+
+			sharedAngleIndex[localLineIdx] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
 		}
 		__syncthreads();
 
 		// Calculate pixel contribution for the loaded lines
 		if (i < width && j < height) {
-			for (int lineIdx = 0; lineIdx < 64; ++lineIdx) {
+			for (int lineIdx = 0; lineIdx < LINE_CHUNK_SIZE; ++lineIdx) {
 				if (lineChunkStart + lineIdx >= NUM_LINES) break;
 
 				// Extract line parameters
@@ -160,7 +160,6 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 				float B = sharedLineParams[lineIdx][1];
 				float C = sharedLineParams[lineIdx][2];
 				float inv_denom = sharedLineParams[lineIdx][3];
-				float angle = sharedLineParams[lineIdx][4];
 
 				// Validate inv_denom to prevent undefined behavior
 				if (inv_denom == 0.0f) continue;
@@ -173,8 +172,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 				if (dist > MAX_DIST) continue;
 
 				// Calculate indices for coverage lookup
-				int distIndex = fminf(LINE_TEX_DIST_SAMPLES - 1, (int)(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1)));
-				int angleIndex = fminf(LINE_TEX_ANGLE_SAMPLES - 1, (int)(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1)));
+				int distIndex = roundf(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1));
+				int angleIndex = sharedAngleIndex[lineIdx];
 
 				// Accumulate coverage contribution
 				pixelValue *= 1.0f - sharedCoverage[angleIndex * LINE_TEX_DIST_SAMPLES + distIndex];
@@ -202,10 +201,7 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						ceil(height/(float)blockSize.y),
 						1);
 
-	// Calculate required shared memory
-	int smem_size = (LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES+64*5)*4; // Bytes
-
-	DrawLine_kernel<<<gridSize, blockSize, smem_size, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
+	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
 																width, height, gpuData->lineData_A, gpuData->lineData_B, gpuData->lineData_C, gpuData->lineData_inv_denom,
 																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
 
