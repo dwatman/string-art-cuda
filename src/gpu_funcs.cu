@@ -166,7 +166,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 				if (inv_denom == 0.0f) continue;
 
 				// Compute distance (distance is per-pixel, angle is precomputed per-line)
-				float dist = fabsf(A*i + B*j + C) * inv_denom;
+				//float dist = fabsf(A*i + B*j + C) * inv_denom;
+				float dist = fabsf(fmaf(A, i, fmaf(B, j, C)) * inv_denom); // Use fused operations
 
 				// Skip calculation if lines will not contribute to the image
 				if (dist > MAX_DIST) continue;
