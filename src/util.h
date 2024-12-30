@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <math.h>
 
+#include "settings.h"
+
 // 2D point coordinate
 typedef struct {
 	float x;
@@ -17,19 +19,27 @@ typedef struct {
 } pointd_t;
 
 // Coefficients for a line in Ax + By + C = 0 format
-// The parameter 1/sqrt(A^2 + B^2) is also stored for efficiency
+// The parameter 1/sqrt(A^2 + B^2) is also stored for efficient reuse
 typedef struct {
 	float A;
 	float B;
 	float C;
 	float inv_denom;
-} line_t;
+} lineParam_t;
+
+// Many line coefficients in SoA format for more efficient use in GPU
+typedef struct {
+	float A[NUM_LINES];
+	float B[NUM_LINES];
+	float C[NUM_LINES];
+	float inv_denom[NUM_LINES];
+} lineArray_t;
 
 void InitNailPositions(point_t *nails, int numNails);
 int ValidateNextNail(int first, int next, int thresh, uint64_t *connections);
-line_t PointsToLine(point_t p1, point_t p2);
-void CalcLineParams(line_t *lines, const int *pointList, const point_t *nails, int pointIndex);
-line_t DistAngleToLine(float dist, float angle);
+lineParam_t PointsToLine(point_t p1, point_t p2);
+void CalcLineParams(lineArray_t *lines, const int *pointList, const point_t *nails, int pointIndex);
+lineParam_t DistAngleToLine(float dist, float angle);
 void ResetConnections(uint64_t *connections);
 void SetConnection(int i, int j, uint64_t *connections);
 void ClearConnection(int i, int j, uint64_t *connections);

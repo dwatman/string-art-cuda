@@ -26,8 +26,11 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	// Create stream for processing
 	CUDA_CHECK(cudaStreamCreate(&gpuData->stream));
 
-	// Buffer for line data
-	CUDA_CHECK(cudaMalloc(&gpuData->lineData, NUM_LINES*4*sizeof(float)));
+	// Buffers for line data
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_A, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_B, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_C, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_inv_denom, NUM_LINES*sizeof(float)));
 
 	// Buffers for image difference calculation
 	int numBlocks = (DATA_SIZE/SUM_BLOCK_SIZE)*(DATA_SIZE/SUM_BLOCK_SIZE);
@@ -74,7 +77,11 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	if (gpuData->imgAccum != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgAccum));
 	if (gpuData->imgOut != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgOut));
 
-	if (gpuData->lineData != NULL) 		CUDA_CHECK(cudaFree(gpuData->lineData));
+	if (gpuData->lineData_A != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_A));
+	if (gpuData->lineData_B != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_B));
+	if (gpuData->lineData_C != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_C));
+	if (gpuData->lineData_inv_denom != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_inv_denom));
+
 	if (gpuData->lineCoverage != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineCoverage));
 
 	if (gpuData->partialSums != NULL) 	CUDA_CHECK(cudaFree(gpuData->partialSums));
@@ -82,15 +89,18 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 }
 
 // Copy line data to GPU
-void GpuLoadLines(gpuData_t *gpuData, line_t *lines) {
+void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList) {
 
-	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData, lines, NUM_LINES*4*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_A, lineList->A, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_B, lineList->B, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_C, lineList->C, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_inv_denom, lineList->inv_denom, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, int numLines, const float *coverage, size_t coveragePitch) {
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch) {
 	// Shared memory for storing the coverage array and line parameters per block
 	extern __shared__ float sharedMemory[];
 	float *sharedCoverage = sharedMemory;
@@ -108,24 +118,27 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 	float pixelValue = 1.0f;
 
 	// Copy coverage array into shared memory
-	for (int idx = ty * blockDim.x + tx; idx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES; idx += blockDim.x * blockDim.y) {
-		if (idx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES) { // Bounds checking
-			int angleIndex = idx / LINE_TEX_DIST_SAMPLES;
-			int distIndex = idx % LINE_TEX_DIST_SAMPLES;
-			sharedCoverage[idx] = coverage[angleIndex * coveragePitch + distIndex];
+	for (int linearIdx = threadIdx.x + threadIdx.y * blockDim.x; linearIdx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES; linearIdx += blockDim.x * blockDim.y) {
+		if (linearIdx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES) { // Bounds checking
+			int angleIndex = linearIdx / LINE_TEX_DIST_SAMPLES;
+			int distIndex = linearIdx % LINE_TEX_DIST_SAMPLES;
+
+			sharedCoverage[linearIdx] = __ldg(&coverage[angleIndex * coveragePitch + distIndex]);
 		}
 	}
 	__syncthreads();
 
 	// Process lines in chunks of 64
-	for (int lineChunkStart = 0; lineChunkStart < numLines; lineChunkStart += 64) {
+	for (int lineChunkStart = 0; lineChunkStart < NUM_LINES; lineChunkStart += 64) {
 		int localLineIdx = ty * blockDim.x + tx;
 
 		// Each thread loads a line parameter set into shared memory (if within bounds)
-		if (localLineIdx < 64 && (lineChunkStart + localLineIdx) < numLines) {
-			for (int k = 0; k < 4; ++k) {
-				sharedLineParams[localLineIdx][k] = lineData[(lineChunkStart + localLineIdx) * 4 + k];
-			}
+		if (localLineIdx < 64 && (lineChunkStart + localLineIdx) < NUM_LINES) {
+			sharedLineParams[localLineIdx][0] = lineA[lineChunkStart + localLineIdx];
+			sharedLineParams[localLineIdx][1] = lineB[lineChunkStart + localLineIdx];
+			sharedLineParams[localLineIdx][2] = lineC[lineChunkStart + localLineIdx];
+			sharedLineParams[localLineIdx][3] = lineInvDenom[lineChunkStart + localLineIdx];
+
 			// Precompute angle and store it as the 5th parameter
 			float A = sharedLineParams[localLineIdx][0];
 			float B = sharedLineParams[localLineIdx][1];
@@ -137,11 +150,10 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 		}
 		__syncthreads();
 
-
 		// Calculate pixel contribution for the loaded lines
 		if (i < width && j < height) {
 			for (int lineIdx = 0; lineIdx < 64; ++lineIdx) {
-				if (lineChunkStart + lineIdx >= numLines) break;
+				if (lineChunkStart + lineIdx >= NUM_LINES) break;
 
 				// Extract line parameters
 				float A = sharedLineParams[lineIdx][0];
@@ -193,12 +205,11 @@ void GpuDrawLines(gpuData_t *gpuData) {
 	int smem_size = (LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES+64*5)*4; // Bytes
 
 	DrawLine_kernel<<<gridSize, blockSize, smem_size, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
-																width, height, gpuData->lineData, NUM_LINES,
+																width, height, gpuData->lineData_A, gpuData->lineData_B, gpuData->lineData_C, gpuData->lineData_inv_denom,
 																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
-
 
 // Compute the sum of weighted errors for each block in the image
 __global__ void computeBlockErrors_kernel(double* partialSums, const float* dataAccum, size_t pitchAccum, int width, int height,
