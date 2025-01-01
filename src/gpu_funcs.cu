@@ -103,19 +103,51 @@ void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList) {
 
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch) {
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch, cudaTextureObject_t texWeight) {
 	// Shared memory for storing the coverage array and line parameters per block
 	__shared__ float sharedCoverage[LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES];
 	__shared__ float sharedLineParams[LINE_CHUNK_SIZE][4];
 	__shared__ uint8_t sharedAngleIndex[LINE_CHUNK_SIZE];
+	__shared__ uint32_t blockHasNonZero;
 
-	int tx = threadIdx.x;
-	int ty = threadIdx.y;
-	int bx = blockIdx.x * blockDim.x;
-	int by = blockIdx.y * blockDim.y;
+	// Global thread position
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	int i = bx + tx;
-	int j = by + ty;
+	// Linear thread id
+	int tid = threadIdx.y * blockDim.x + threadIdx.x;
+	int lane = tid % warpSize; // Lane index within the warp
+
+	// Normalised 2D coordinates for textures
+	float u = (float)i / (float)(width - 1);
+	float v = (float)j / (float)(height - 1);
+
+	// *** First check if any of the pixels in the block have non-zero weights
+	// Calculation is skipped if it will have no effect
+
+	// Fetch the weight for this pixel
+	float weight = tex2D<float>(texWeight, u, v);
+
+	// Assume blockDim.x * blockDim.y <= 1024 (one warp per 32 threads)
+	uint32_t active_mask = __activemask();
+
+	// Warp-level check if any thread in the warp has a non-zero weight
+	bool warpHasNonZero = __any_sync(active_mask, weight > 0.01f);
+
+	// Combine results from all warps in the block using shared memory
+	if (tid == 0) blockHasNonZero = 0; // Initialize once by the first thread
+	__syncthreads();
+
+	// First thread in each warp updates shared memory atomically
+	if (lane == 0 && warpHasNonZero) {
+		atomicOr(&blockHasNonZero, 1);
+	}
+	__syncthreads();
+
+	// If no thread in the block has a non-zero weight, exit the kernel
+	if (blockHasNonZero == 0) return;
+
+	// *** Begin the actual calculation
 
 	// Thread's contribution to the output
 	float pixelValue = 1.0f;
@@ -133,24 +165,22 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 
 	// Process lines in chunks of LINE_CHUNK_SIZE
 	for (int lineChunkStart = 0; lineChunkStart < NUM_LINES; lineChunkStart += LINE_CHUNK_SIZE) {
-		int localLineIdx = ty * blockDim.x + tx;
-
 		// Each thread loads a line parameter set into shared memory (if within bounds)
-		if (localLineIdx < LINE_CHUNK_SIZE && (lineChunkStart + localLineIdx) < NUM_LINES) {
-			sharedLineParams[localLineIdx][0] = lineA[lineChunkStart + localLineIdx];
-			sharedLineParams[localLineIdx][1] = lineB[lineChunkStart + localLineIdx];
-			sharedLineParams[localLineIdx][2] = lineC[lineChunkStart + localLineIdx];
-			sharedLineParams[localLineIdx][3] = lineInvDenom[lineChunkStart + localLineIdx];
+		if (tid < LINE_CHUNK_SIZE && (lineChunkStart + tid) < NUM_LINES) {
+			sharedLineParams[tid][0] = lineA[lineChunkStart + tid];
+			sharedLineParams[tid][1] = lineB[lineChunkStart + tid];
+			sharedLineParams[tid][2] = lineC[lineChunkStart + tid];
+			sharedLineParams[tid][3] = lineInvDenom[lineChunkStart + tid];
 
 			// Precompute angle index and store it for reuse
-			float A = sharedLineParams[localLineIdx][0];
-			float B = sharedLineParams[localLineIdx][1];
+			float A = sharedLineParams[tid][0];
+			float B = sharedLineParams[tid][1];
 
 			float angle = atan2f(-A, B); 			// Calculate the angle in radians with respect to the x-axis
 			if (angle < 0) angle += (float)M_PI; 	// Convert the angle to the range [0, PI] if necessary
 
-			//sharedAngleIndex[localLineIdx] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
-			sharedAngleIndex[localLineIdx] = roundf(angle * ANGLE_SCALE);
+			//sharedAngleIndex[tid] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
+			sharedAngleIndex[tid] = roundf(angle * ANGLE_SCALE);
 		}
 		__syncthreads();
 
@@ -216,7 +246,7 @@ void GpuDrawLines(gpuData_t *gpuData) {
 	cudaEventRecord(start, gpuData->stream);	// Temporary for timing
 	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
 																width, height, gpuData->lineData_A, gpuData->lineData_B, gpuData->lineData_C, gpuData->lineData_inv_denom,
-																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
+																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float), gpuData->texWeights);
 	// Temporary for timing
 	cudaEventRecord(stop, gpuData->stream);
 	cudaEventSynchronize(stop);
