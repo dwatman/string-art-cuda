@@ -98,6 +98,9 @@ void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList) {
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
+#define DIST_SCALE (float)((LINE_TEX_DIST_SAMPLES - 1) / MAX_DIST)
+#define ANGLE_SCALE (float)((LINE_TEX_ANGLE_SAMPLES - 1) / (float)M_PI)
+
 // (GPU) Draw many lines
 __global__
 void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch) {
@@ -146,7 +149,8 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 			float angle = atan2f(-A, B); 			// Calculate the angle in radians with respect to the x-axis
 			if (angle < 0) angle += (float)M_PI; 	// Convert the angle to the range [0, PI] if necessary
 
-			sharedAngleIndex[localLineIdx] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
+			//sharedAngleIndex[localLineIdx] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
+			sharedAngleIndex[localLineIdx] = roundf(angle * ANGLE_SCALE);
 		}
 		__syncthreads();
 
@@ -168,12 +172,15 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 				//float dist = fabsf(A*i + B*j + C) * inv_denom;
 				float dist = fabsf(fmaf(A, i, fmaf(B, j, C)) * inv_denom); // Use fused operations
 
-				// Skip calculation if lines will not contribute to the image
-				if (dist > MAX_DIST) continue;
+				//const float distScale = (LINE_TEX_DIST_SAMPLES - 1) / MAX_DIST;
+				int distIndex = roundf(dist * DIST_SCALE);
 
 				// Calculate indices for coverage lookup
-				int distIndex = roundf(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1));
+				//int distIndex = roundf(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1));
 				int angleIndex = sharedAngleIndex[lineIdx];
+
+				// Skip calculation if lines will not contribute to the image
+				if (dist > MAX_DIST) continue;
 
 				// Accumulate coverage contribution
 				pixelValue *= 1.0f - sharedCoverage[angleIndex * LINE_TEX_DIST_SAMPLES + distIndex];
