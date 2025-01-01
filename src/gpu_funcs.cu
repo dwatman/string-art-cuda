@@ -200,6 +200,11 @@ void GpuDrawLines(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
 	int height = gpuData->dstSize;
 
+	// Temporary for timing
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
 	// Threads per Block
 	const dim3 blockSize(16,16,1);
 
@@ -208,9 +213,18 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						ceil(height/(float)blockSize.y),
 						1);
 
+	cudaEventRecord(start, gpuData->stream);	// Temporary for timing
 	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
 																width, height, gpuData->lineData_A, gpuData->lineData_B, gpuData->lineData_C, gpuData->lineData_inv_denom,
 																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float));
+	// Temporary for timing
+	cudaEventRecord(stop, gpuData->stream);
+	cudaEventSynchronize(stop);
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, start, stop);
+	printf("    DrawLine_kernel: %f ms\n", milliseconds);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
