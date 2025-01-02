@@ -33,13 +33,13 @@ int main(int argc, char* argv[]) {
 
 	point_t nails[NUM_NAILS];
 	int pointList[NUM_LINES+1];
-	line_t lines[NUM_LINES];
+	lineArray_t lines;
 	uint64_t connections[LINE_BIT_ARRAY_SIZE]; // Bit array to track which nails are connected by lines
 	double totalLength;
 
 	// Storage for best result
 	int bestPoints[NUM_LINES+1];
-	line_t bestLines[NUM_LINES];
+	lineArray_t bestLines;
 	uint64_t bestConnections[LINE_BIT_ARRAY_SIZE];
 	double bestError;
 
@@ -64,6 +64,8 @@ int main(int argc, char* argv[]) {
 	}
 	printf("\n");
 
+	printf("MAX_DIST: %f\n", MAX_DIST);
+
 	int widthIn, heightIn;
 	// Load input image
 	err = load_greyscale_png(filenameInput, &h_imageIn, &widthIn, &heightIn);
@@ -83,7 +85,7 @@ int main(int argc, char* argv[]) {
 
 	// Allocate global buffers
 	atexit(cleanup); // set cleanup function for CPU memory
-	InitPinnedBuffers(&gpuData);heightIn*sizeof(uint8_t);
+	InitPinnedBuffers(&gpuData);
 
 
 	// Set nail positions in a circle (for now)
@@ -123,15 +125,12 @@ int main(int argc, char* argv[]) {
 	// Copy the coverage data to GPU memory
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);
 
-	// Map the coverage data to a texture for fast lookup
-	InitCoverageTexture(&gpuData);
-
 
 	//srand(time(NULL));   // Initialise RNG
 	srand(1234567);   // Initialise RNG to fixed seed for testing
 
 	// Generate an initial random line pattern
-	err = GenerateRandomPattern(bestConnections, bestLines, bestPoints, nails);
+	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
 	if (err) return -3;
 
 
@@ -140,19 +139,19 @@ int main(int argc, char* argv[]) {
 	for (i=0; i<3; i++) {
 		// Start with the best result
 		memcpy(pointList, bestPoints, (NUM_LINES+1)*sizeof(int));
-		memcpy(lines, bestLines, NUM_LINES*sizeof(line_t));
+		memcpy(&lines, &bestLines, sizeof(lineArray_t));
 		memcpy(connections, bestConnections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
 		// Move some points around
-		MovePattern(connections, lines, pointList, nails, 4);
-		MovePattern(connections, lines, pointList, nails, 4);
-		MovePattern(connections, lines, pointList, nails, 4);
-		MovePattern(connections, lines, pointList, nails, 4);
-		MovePattern(connections, lines, pointList, nails, 4);
+		MovePattern(connections, &lines, pointList, nails, 4);
+		MovePattern(connections, &lines, pointList, nails, 4);
+		MovePattern(connections, &lines, pointList, nails, 4);
+		MovePattern(connections, &lines, pointList, nails, 4);
+		MovePattern(connections, &lines, pointList, nails, 4);
 
 
 		// Copy line data to GPU memory
-		GpuLoadLines(&gpuData, lines);
+		GpuLoadLines(&gpuData, &lines);
 
 		// Draw the set of lines in the GPU image buffer
 		GpuDrawLines(&gpuData);
@@ -174,7 +173,7 @@ int main(int argc, char* argv[]) {
 
 			// Update best pattern
 			memcpy(bestPoints, pointList, (NUM_LINES+1)*sizeof(int));
-			memcpy(bestLines, lines, NUM_LINES*sizeof(line_t));
+			memcpy(&bestLines, &lines, sizeof(lineArray_t));
 			memcpy(bestConnections, connections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
 			printf("  (best)");

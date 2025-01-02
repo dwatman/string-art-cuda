@@ -123,7 +123,7 @@ int InitPinnedBuffers(gpuData_t *gpuData) {
 	//AllocAndAlignPinned((void **)&h_imageIn, gpuData->srcWidth * gpuData->srcHeight * sizeof(uint8_t));
 
 	AllocAndAlignPinned((void **)&h_imageOut, DATA_SIZE * DATA_SIZE * sizeof(uint8_t));
-	AllocAndAlignPinned((void **)&h_lineCoverage, LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES * sizeof(float));
+	AllocAndAlignPinned((void **)&h_lineCoverage, LINE_TEX_DIST_SAMPLES * LINE_TEX_ANGLE_SAMPLES * sizeof(float));
 
 	printf("h_imageIn at      %p\n", h_imageIn);
 	printf("h_imageOut at     %p\n", h_imageOut);
@@ -155,33 +155,6 @@ void FreePinnedBuffers(void) {
 		GpuUnPinMemory(h_lineCoverage);
 		free(h_lineCoverage);
 	}
-}
-
-// Create a bindless texture for line coverage data
-void InitCoverageTexture(gpuData_t *deviceData) {
-	cudaResourceDesc texRes;
-	cudaTextureDesc texDescr;
-
-	// Clear resource descriptors
-	memset(&texRes, 0, sizeof(cudaResourceDesc));
-	memset(&texDescr, 0, sizeof(cudaTextureDesc));
-
-	// Set up the 2D texture parameters
-	texRes.resType = cudaResourceTypePitch2D;
-	texRes.res.pitch2D.devPtr = (void *)deviceData->lineCoverage;
-	texRes.res.pitch2D.desc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-	texRes.res.pitch2D.width = LINE_TEX_ANGLE_SAMPLES;
-	texRes.res.pitch2D.height = LINE_TEX_DIST_SAMPLES;
-	texRes.res.pitch2D.pitchInBytes = deviceData->pitchCoverage;
-
-	// Set up the way the texture is accessed
-	texDescr.normalizedCoords = 1;
-	texDescr.filterMode = cudaFilterModeLinear;
-	texDescr.addressMode[0] = cudaAddressModeClamp;
-	texDescr.addressMode[1] = cudaAddressModeClamp;
-	texDescr.readMode = cudaReadModeElementType;
-
-	CUDA_CHECK(cudaCreateTextureObject(&deviceData->texCoverage, &texRes, &texDescr, NULL));
 }
 
 // Create a bindless texture for the input image
@@ -242,8 +215,8 @@ void InitWeightsTexture(gpuData_t *deviceData) {
 void GpuUpdateCoverage(gpuData_t *deviceData, const float *hostData) {
 	CUDA_CHECK(cudaMemcpy2DAsync(
 		deviceData->lineCoverage, deviceData->pitchCoverage,
-		hostData, LINE_TEX_ANGLE_SAMPLES*sizeof(float),
-		LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES,
+		hostData, LINE_TEX_DIST_SAMPLES*sizeof(float),
+		LINE_TEX_DIST_SAMPLES*sizeof(float), LINE_TEX_ANGLE_SAMPLES,
 		cudaMemcpyHostToDevice, deviceData->stream));
 }
 

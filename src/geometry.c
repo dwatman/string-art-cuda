@@ -134,11 +134,11 @@ void find_square_corner(pointd_t *points, int *count) {
 }
 
 // Calculate the area of a unit square covered by a line
-float line_area_fraction(line_t line, float t) {
+float line_area_fraction(const lineParam_t *line, float t) {
 	float area;
 	pointd_t intersections[8]; // Maximum number of intersections possible is 8
 
-	int count = find_intersections(line.A, line.B, line.C, t, intersections);
+	int count = find_intersections(line->A, line->B, line->C, t, intersections);
 	//printf("%i intersections\n", count);
 
 	// Check each corner of the square
@@ -150,7 +150,7 @@ float line_area_fraction(line_t line, float t) {
 	};
 	int corners_in_line = 0;
 	for (int i = 0; i < 4; i++) {
-		if (point_in_thick_line(line.A, line.B, line.C, t, corners[i].x, corners[i].y)) {
+		if (point_in_thick_line(line->A, line->B, line->C, t, corners[i].x, corners[i].y)) {
 			intersections[count++] = corners[i];  // Include corner in polygon
 			corners_in_line++;
 		}
@@ -191,7 +191,7 @@ int inside_poly(point_t *vert, int nvert, float testx, float testy) {
 void CalcLineCoverage(float *map, float lineWidth) {
 	int i, j;
 	float angle, dist, area, maxval;
-	line_t line;
+	lineParam_t line;
 
 	float maxAngle = M_PI;
 	float maxDist = sqrt(2)/2 + lineWidth/2;
@@ -202,19 +202,19 @@ void CalcLineCoverage(float *map, float lineWidth) {
 	}
 
 	maxval = 0;
-	for (j=0; j<LINE_TEX_DIST_SAMPLES; j++) {
-		for (i=0; i<LINE_TEX_ANGLE_SAMPLES; i++) {
-			angle = ((float)i/LINE_TEX_ANGLE_SAMPLES)*maxAngle;
-			dist = ((float)j/LINE_TEX_DIST_SAMPLES)*maxDist;
+	for (j=0; j<LINE_TEX_ANGLE_SAMPLES; j++) {
+		for (i=0; i<LINE_TEX_DIST_SAMPLES; i++) {
+			dist = ((float)i/LINE_TEX_DIST_SAMPLES)*maxDist;
+			angle = ((float)j/LINE_TEX_ANGLE_SAMPLES)*maxAngle;
 
 			//printf("d %f, a %f\n", dist, angle);
 			line = DistAngleToLine(dist, angle);
-			area = line_area_fraction(line, lineWidth);
+			area = line_area_fraction(&line, lineWidth);
 
 			// Keep track of the maximum value
 			if (area > maxval) maxval = area;
 
-			map[LINE_TEX_ANGLE_SAMPLES*j + i] = area;
+			map[LINE_TEX_DIST_SAMPLES*j + i] = area;
 		}
 	}
 	printf("maxval %f\n", maxval);
@@ -223,7 +223,7 @@ void CalcLineCoverage(float *map, float lineWidth) {
 
 // Generate a random (but valid) list of points, and calculate line parameters
 // TODO: separate line calculation?
-int GenerateRandomPattern(uint64_t *connections, line_t *lines, int *pointList, const point_t *nails) {
+int GenerateRandomPattern(uint64_t *connections, lineArray_t *lineList, int *pointList, const point_t *nails) {
 	point_t p0, p1;
 	int n0, n1;
 	int i;
@@ -256,7 +256,7 @@ int GenerateRandomPattern(uint64_t *connections, line_t *lines, int *pointList, 
 
 		SetConnection(pointList[i], pointList[i+1], connections);
 
-		CalcLineParams(lines, pointList, nails, i);
+		CalcLineParams(lineList, pointList, nails, i);
 
 		//printf("step #%i %3u to %3u\n", i, pointList[i], pointList[i+1]);
 		//printf("Line (%5.1f, %5.1f)-(%5.1f, %5.1f)", p0.x, p0.y, p1.x, p1.y);
@@ -283,7 +283,7 @@ static int FixNailIndex(int p) {
 }
 
 // Move the line(s) at a nail to another vaild nail within maxDist
-int MovePattern(uint64_t *connections, line_t *lines, int *pointList, const point_t *nails, int maxDist) {
+int MovePattern(uint64_t *connections, lineArray_t *lineList, int *pointList, const point_t *nails, int maxDist) {
 	int indexFrom;
 	int pointFrom, pointTo;
 	int changeDist;
@@ -330,7 +330,7 @@ int MovePattern(uint64_t *connections, line_t *lines, int *pointList, const poin
 			ClearConnection(pointList[0], pointList[1], connections);	// Remove the current line from the connection table
 			SetConnection(pointTo, pointList[1], connections);			// Add the new line to the connection table
 			pointList[0] = pointTo;							// Update the points list
-			CalcLineParams(lines, pointList, nails, 0);		// Update the connecting lines
+			CalcLineParams(lineList, pointList, nails, 0);		// Update the connecting lines
 			break;
 		}
 		// Move the last point (one line)
@@ -347,7 +347,7 @@ int MovePattern(uint64_t *connections, line_t *lines, int *pointList, const poin
 			ClearConnection(pointList[NUM_LINES-1], pointList[NUM_LINES], connections);	// Remove the current line from the connection table
 			SetConnection(pointList[NUM_LINES-1], pointTo, connections);					// Add the new line to the connection table
 			pointList[NUM_LINES] = pointTo;									// Update the points list
-			CalcLineParams(lines, pointList, nails, NUM_LINES-1);			// Update the connecting lines
+			CalcLineParams(lineList, pointList, nails, NUM_LINES-1);			// Update the connecting lines
 			break;
 		}
 		// Move a normal point (2 lines)
@@ -374,8 +374,8 @@ int MovePattern(uint64_t *connections, line_t *lines, int *pointList, const poin
 			SetConnection(pointList[indexFrom-1], pointTo, connections);			// Add the new line to the connection table
 			SetConnection(pointTo, pointList[indexFrom+1], connections);
 			pointList[indexFrom] = pointTo;							// Update the points list
-			CalcLineParams(lines, pointList, nails, indexFrom-1);	// Update the connecting lines
-			CalcLineParams(lines, pointList, nails, indexFrom);
+			CalcLineParams(lineList, pointList, nails, indexFrom-1);	// Update the connecting lines
+			CalcLineParams(lineList, pointList, nails, indexFrom);
 			break;
 		}
 	}

@@ -26,8 +26,11 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	// Create stream for processing
 	CUDA_CHECK(cudaStreamCreate(&gpuData->stream));
 
-	// Buffer for line data
-	CUDA_CHECK(cudaMalloc(&gpuData->lineData, NUM_LINES*4*sizeof(float)));
+	// Buffers for line data
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_A, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_B, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_C, NUM_LINES*sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&gpuData->lineData_inv_denom, NUM_LINES*sizeof(float)));
 
 	// Buffers for image difference calculation
 	int numBlocks = (DATA_SIZE/SUM_BLOCK_SIZE)*(DATA_SIZE/SUM_BLOCK_SIZE);
@@ -49,11 +52,11 @@ int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn) {
 	printf("pitch Accum:     %5lu (%lu) at %p\n", gpuData->pitchAccum, 	gpuData->srcWidth*sizeof(float), gpuData->imgAccum);
 	printf("pitch output:    %5lu (%lu) at %p\n", gpuData->pitchOutput, gpuData->srcWidth*sizeof(uint8_t), gpuData->imgOut);
 
-	// Memory for 2D texture
+	// Memory for line coverage data
 	CUDA_CHECK(cudaMallocPitch(&gpuData->lineCoverage, &gpuData->pitchCoverage,
-							LINE_TEX_ANGLE_SAMPLES*sizeof(float), LINE_TEX_DIST_SAMPLES));
+							LINE_TEX_DIST_SAMPLES*sizeof(float), LINE_TEX_ANGLE_SAMPLES));
 
-	printf("pitch lineCoverage: %5lu (%lu) at %p\n", gpuData->pitchCoverage, LINE_TEX_ANGLE_SAMPLES*sizeof(float), gpuData->lineCoverage);
+	printf("pitch lineCoverage: %5lu (%lu) at %p\n", gpuData->pitchCoverage, LINE_TEX_DIST_SAMPLES*sizeof(float), gpuData->lineCoverage);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -65,7 +68,6 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	printf("GpuFreeBuffers\n");
 
 	CUDA_CHECK(cudaStreamDestroy(gpuData->stream));
-	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texCoverage));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texImageIn));
 	CUDA_CHECK(cudaDestroyTextureObject(gpuData->texWeights));
 
@@ -75,7 +77,11 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 	if (gpuData->imgAccum != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgAccum));
 	if (gpuData->imgOut != NULL) 		CUDA_CHECK(cudaFree(gpuData->imgOut));
 
-	if (gpuData->lineData != NULL) 		CUDA_CHECK(cudaFree(gpuData->lineData));
+	if (gpuData->lineData_A != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_A));
+	if (gpuData->lineData_B != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_B));
+	if (gpuData->lineData_C != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_C));
+	if (gpuData->lineData_inv_denom != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineData_inv_denom));
+
 	if (gpuData->lineCoverage != NULL) 	CUDA_CHECK(cudaFree(gpuData->lineCoverage));
 
 	if (gpuData->partialSums != NULL) 	CUDA_CHECK(cudaFree(gpuData->partialSums));
@@ -83,69 +89,139 @@ void GpuFreeBuffers(gpuData_t *gpuData) {
 }
 
 // Copy line data to GPU
-void GpuLoadLines(gpuData_t *gpuData, line_t *lines) {
+void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList) {
 
-	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData, lines, NUM_LINES*4*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_A, lineList->A, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_B, lineList->B, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_C, lineList->C, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
+	CUDA_CHECK(cudaMemcpyAsync(gpuData->lineData_inv_denom, lineList->inv_denom, NUM_LINES*sizeof(float), cudaMemcpyHostToDevice, gpuData->stream));
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-// Compute the perpendicular distance from the pixel (x0, y0) to the line Ax + By + C = 0
-__device__ float compute_distance(float x0, float y0, float A, float B, float C, float inv_denom) {
-	float numerator = fabsf(fmaf(A, x0, fmaf(B, y0, C)));  // |Ax0 + By0 + C| using fmaf for fused multiply-add
-	return numerator * inv_denom;  // Multiply instead of divide
-}
-
-// Compute the angle of the line Ax + By + C = 0 relative to the x-axis
-// Angle returned is in the range 0 to pi
-__device__ float compute_angle(float A, float B) {
-	// Calculate the angle in radians with respect to the x-axis
-	float angle = atan2f(-A, B); // atan2(-A, B) ensures the correct quadrant
-
-	// Convert the angle to the range [0, π] if necessary
-	if (angle < 0) angle += (float)M_PI;
-
-	return angle;
-}
+#define DIST_SCALE (float)((LINE_TEX_DIST_SAMPLES - 1) / MAX_DIST)
+#define ANGLE_SCALE (float)((LINE_TEX_ANGLE_SAMPLES - 1) / (float)M_PI)
 
 // (GPU) Draw many lines
 __global__
-void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineData, float lineThickness, const cudaTextureObject_t tex) {
-	float A, B, C, inv_denom;
-	float dist, angle;
-	float maxDist;
-	float value;
-	int line;
+void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, const float *lineA, const float *lineB, const float *lineC, const float *lineInvDenom,  const float *coverage, size_t coveragePitch, cudaTextureObject_t texWeight) {
+	// Shared memory for storing the coverage array and line parameters per block
+	__shared__ float sharedCoverage[LINE_TEX_ANGLE_SAMPLES*LINE_TEX_DIST_SAMPLES];
+	__shared__ float sharedLineParams[LINE_CHUNK_SIZE][4];
+	__shared__ uint8_t sharedAngleIndex[LINE_CHUNK_SIZE];
+	__shared__ uint32_t blockHasNonZero;
 
+	// Global thread position
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	// Flip vertically
-	//int j_flip = height-1 - j;
+	// Linear thread id
+	int tid = threadIdx.y * blockDim.x + threadIdx.x;
+	int lane = tid % warpSize; // Lane index within the warp
 
-	// Calculate the maximum distance at which the line overlaps a pixel
-	maxDist = sqrtf(2)/2 + lineThickness/2;
+	// Normalised 2D coordinates for textures
+	float u = (float)i / (float)(width - 1);
+	float v = (float)j / (float)(height - 1);
 
-	if ((i<width) && (j<height)) {
-		value = 1.0f;
+	// *** First check if any of the pixels in the block have non-zero weights
+	// Calculation is skipped if it will have no effect
 
-		for (line=0; line<NUM_LINES; line++) {
-			// Get line parameters (format Ax + By + C = 0)
-			// The parameter 1/sqrt(A^2 + B^2) is also precalculated
-			A = lineData[4*line + 0];
-			B = lineData[4*line + 1];
-			C = lineData[4*line + 2];
-			inv_denom = lineData[4*line + 3];
+	// Fetch the weight for this pixel
+	float weight = tex2D<float>(texWeight, u, v);
 
-			// Calculate distance and angle for calculating partial coverage
-			dist = compute_distance(i, j, A, B, C, inv_denom);
-			angle = compute_angle(A, B);
+	// Assume blockDim.x * blockDim.y <= 1024 (one warp per 32 threads)
+	uint32_t active_mask = __activemask();
 
-			// Look up the coverage at this pixel and accumulate it to the total
-			value *= (1.0f - tex2D<float>(tex, angle, dist/maxDist));
+	// Warp-level check if any thread in the warp has a non-zero weight
+	bool warpHasNonZero = __any_sync(active_mask, weight > 0.01f);
+
+	// Combine results from all warps in the block using shared memory
+	if (tid == 0) blockHasNonZero = 0; // Initialize once by the first thread
+	__syncthreads();
+
+	// First thread in each warp updates shared memory atomically
+	if (lane == 0 && warpHasNonZero) {
+		atomicOr(&blockHasNonZero, 1);
+	}
+	__syncthreads();
+
+	// If no thread in the block has a non-zero weight, exit the kernel
+	if (blockHasNonZero == 0) return;
+
+	// *** Begin the actual calculation
+
+	// Thread's contribution to the output
+	float pixelValue = 1.0f;
+
+	// Copy coverage array into shared memory
+	for (int linearIdx = threadIdx.x + threadIdx.y * blockDim.x; linearIdx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES; linearIdx += blockDim.x * blockDim.y) {
+		if (linearIdx < LINE_TEX_ANGLE_SAMPLES * LINE_TEX_DIST_SAMPLES) { // Bounds checking
+			int angleIndex = linearIdx / LINE_TEX_DIST_SAMPLES;
+			int distIndex = linearIdx % LINE_TEX_DIST_SAMPLES;
+
+			sharedCoverage[linearIdx] = __ldg(&coverage[angleIndex * coveragePitch + distIndex]);
 		}
+	}
+	__syncthreads();
 
-		// Convert and store value into output array
-		dataDst[j*pitchDst + i] = value;
+	// Process lines in chunks of LINE_CHUNK_SIZE
+	for (int lineChunkStart = 0; lineChunkStart < NUM_LINES; lineChunkStart += LINE_CHUNK_SIZE) {
+		// Each thread loads a line parameter set into shared memory (if within bounds)
+		if (tid < LINE_CHUNK_SIZE && (lineChunkStart + tid) < NUM_LINES) {
+			sharedLineParams[tid][0] = lineA[lineChunkStart + tid];
+			sharedLineParams[tid][1] = lineB[lineChunkStart + tid];
+			sharedLineParams[tid][2] = lineC[lineChunkStart + tid];
+			sharedLineParams[tid][3] = lineInvDenom[lineChunkStart + tid];
+
+			// Precompute angle index and store it for reuse
+			float A = sharedLineParams[tid][0];
+			float B = sharedLineParams[tid][1];
+
+			float angle = atan2f(-A, B); 			// Calculate the angle in radians with respect to the x-axis
+			if (angle < 0) angle += (float)M_PI; 	// Convert the angle to the range [0, PI] if necessary
+
+			//sharedAngleIndex[tid] = roundf(angle / (float)M_PI * (LINE_TEX_ANGLE_SAMPLES - 1));
+			sharedAngleIndex[tid] = roundf(angle * ANGLE_SCALE);
+		}
+		__syncthreads();
+
+		// Calculate pixel contribution for the loaded lines
+		if (i < width && j < height) {
+			for (int lineIdx = 0; lineIdx < LINE_CHUNK_SIZE; ++lineIdx) {
+				if (lineChunkStart + lineIdx >= NUM_LINES) break;
+
+				// Extract line parameters
+				float A = sharedLineParams[lineIdx][0];
+				float B = sharedLineParams[lineIdx][1];
+				float C = sharedLineParams[lineIdx][2];
+				float inv_denom = sharedLineParams[lineIdx][3];
+
+				// Validate inv_denom to prevent undefined behavior
+				if (inv_denom == 0.0f) continue;
+
+				// Compute distance (distance is per-pixel, angle is precomputed per-line)
+				//float dist = fabsf(A*i + B*j + C) * inv_denom;
+				float dist = fabsf(fmaf(A, i, fmaf(B, j, C)) * inv_denom); // Use fused operations
+
+				//const float distScale = (LINE_TEX_DIST_SAMPLES - 1) / MAX_DIST;
+				int distIndex = roundf(dist * DIST_SCALE);
+
+				// Calculate indices for coverage lookup
+				//int distIndex = roundf(dist / MAX_DIST * (LINE_TEX_DIST_SAMPLES - 1));
+				int angleIndex = sharedAngleIndex[lineIdx];
+
+				// Skip calculation if lines will not contribute to the image
+				if (dist > MAX_DIST) continue;
+
+				// Accumulate coverage contribution
+				pixelValue *= 1.0f - sharedCoverage[angleIndex * LINE_TEX_DIST_SAMPLES + distIndex];
+			}
+		}
+		__syncthreads();
+	}
+
+	// Store final pixel value to output
+	if (i < width && j < height) {
+		dataDst[j * pitchDst + i] = pixelValue;
 	}
 }
 
@@ -153,6 +229,11 @@ void DrawLine_kernel(float *dataDst, size_t pitchDst, int width, int height, con
 void GpuDrawLines(gpuData_t *gpuData) {
 	int width = gpuData->dstSize;
 	int height = gpuData->dstSize;
+
+	// Temporary for timing
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 
 	// Threads per Block
 	const dim3 blockSize(16,16,1);
@@ -162,12 +243,21 @@ void GpuDrawLines(gpuData_t *gpuData) {
 						ceil(height/(float)blockSize.y),
 						1);
 
+	cudaEventRecord(start, gpuData->stream);	// Temporary for timing
 	DrawLine_kernel<<<gridSize, blockSize, 0, gpuData->stream>>>(gpuData->imgAccum, gpuData->pitchAccum/sizeof(float),
-																width, height, gpuData->lineData, STRING_THICKNESS, gpuData->texCoverage);
+																width, height, gpuData->lineData_A, gpuData->lineData_B, gpuData->lineData_C, gpuData->lineData_inv_denom,
+																gpuData->lineCoverage, gpuData->pitchCoverage/sizeof(float), gpuData->texWeights);
+	// Temporary for timing
+	cudaEventRecord(stop, gpuData->stream);
+	cudaEventSynchronize(stop);
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, start, stop);
+	printf("    DrawLine_kernel: %f ms\n", milliseconds);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
 
 	CUDA_LAST_ERROR(); // Clear previous non-sticky errors
 }
-
 
 // Compute the sum of weighted errors for each block in the image
 __global__ void computeBlockErrors_kernel(double* partialSums, const float* dataAccum, size_t pitchAccum, int width, int height,

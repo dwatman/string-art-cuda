@@ -13,7 +13,10 @@ typedef struct {
 	int dstSize;					// Output image size (square)
 	cudaStream_t stream;			// CUDA stream for processing
 	// LINE DATA
-	float *lineData;				// Line data (4 floats per line)
+	float *lineData_A;
+	float *lineData_B;
+	float *lineData_C;
+	float *lineData_inv_denom;
 	// LINE COVERAGE DATA
 	float *lineCoverage;			// Precalculated coverage of pixels vs distance/angle
 	size_t pitchCoverage;			// Pitch in bytes
@@ -21,7 +24,6 @@ typedef struct {
 	double *partialSums;			// Block sums of error
 	double *sumResult;				// Total error
 	// TEXTURES
-	cudaTextureObject_t texCoverage; // Texture for line coverage lookup
 	cudaTextureObject_t texImageIn;  // Texture for input image
 	cudaTextureObject_t texWeights;  // Texture for image weights
 	// PITCH FOR IMAGE BUFFERS
@@ -44,7 +46,7 @@ extern "C" {
 
 int GpuInitBuffers(gpuData_t *gpuData, int widthIn, int heightIn);
 void GpuFreeBuffers(gpuData_t *gpuData);
-void GpuLoadLines(gpuData_t *gpuData, line_t *lines);
+void GpuLoadLines(gpuData_t *gpuData, lineArray_t *lineList);
 void GpuDrawLines(gpuData_t *gpuData);
 double GpucalculateImageError(gpuData_t *gpuData);
 void GpuOutConvert(uint8_t *hostDst, gpuData_t *gpuData);

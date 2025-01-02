@@ -37,8 +37,8 @@ int ValidateNextNail(int first, int next, int thresh, uint64_t *connections) {
 }
 
 // Calculate line parameters from from two points
-line_t PointsToLine(point_t p1, point_t p2) {
-	line_t line;
+lineParam_t PointsToLine(point_t p1, point_t p2) {
+	lineParam_t line;
 
 	// Calculate coefficients A, B, and C
 	line.A = p2.y - p1.y;
@@ -51,8 +51,10 @@ line_t PointsToLine(point_t p1, point_t p2) {
 	return line;
 }
 
-void CalcLineParams(line_t *lines, const int *pointList, const point_t *nails, int pointIndex) {
+// Calculate the line parameters between each sequential pair in the point list
+void CalcLineParams(lineArray_t *lineList, const int *pointList, const point_t *nails, int pointIndex) {
 	point_t p0, p1;
+	lineParam_t line;
 
 	// Make sure the index is valid
 	if ((pointIndex < 0) || (pointIndex > NUM_LINES))
@@ -63,12 +65,16 @@ void CalcLineParams(line_t *lines, const int *pointList, const point_t *nails, i
 	p1.x = nails[pointList[pointIndex+1]].x;
 	p1.y = nails[pointList[pointIndex+1]].y;
 
-	lines[pointIndex] = PointsToLine(p0, p1);
+	line = PointsToLine(p0, p1);
+	lineList->A[pointIndex] = line.A;
+	lineList->B[pointIndex] = line.B;
+	lineList->C[pointIndex] = line.C;
+	lineList->inv_denom[pointIndex] = line.inv_denom;
 }
 
 // Calculate line parameters from from a distance and an angle
-line_t DistAngleToLine(float dist, float angle) {
-	line_t line;
+lineParam_t DistAngleToLine(float dist, float angle) {
+	lineParam_t line;
 
 	// Calculate coefficients A, B, and C
 	line.A = cos(angle);
