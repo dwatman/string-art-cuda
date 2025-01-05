@@ -126,8 +126,8 @@ int main(int argc, char* argv[]) {
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);
 
 
-	//srand(time(NULL));   // Initialise RNG
-	srand(1234567);   // Initialise RNG to fixed seed for testing
+	srand(time(NULL));   // Initialise RNG
+	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
@@ -143,11 +143,11 @@ int main(int argc, char* argv[]) {
 		memcpy(connections, bestConnections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
 		// Move some points around
-		MovePattern(connections, &lines, pointList, nails, 4);
-		MovePattern(connections, &lines, pointList, nails, 4);
-		MovePattern(connections, &lines, pointList, nails, 4);
-		MovePattern(connections, &lines, pointList, nails, 4);
-		MovePattern(connections, &lines, pointList, nails, 4);
+		int moveLines = NUM_LINES/100;
+		int maxDist = NUM_NAILS/3;
+		for (j=0; j<10; j++) {
+			MovePattern(connections, &lines, pointList, nails, maxDist);
+		}
 
 
 		// Copy line data to GPU memory

@@ -3,7 +3,7 @@
 
 // Nail and line counts
 #define NUM_NAILS 300
-#define NUM_LINES 5000
+#define NUM_LINES 2000
 
 // String parameters
 #define STRING_THICKNESS 0.25f // Thickness of the string in pixels (float)
