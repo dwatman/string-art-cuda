@@ -3,6 +3,11 @@
 #include <string.h> // for memset
 #include <time.h> // to init rand()
 #include <math.h> // for abs
+#include <pthread.h>
+#include <X11/Xlib.h> // for XInitThreads();
+
+#include <GL/glew.h>
+#include <GL/freeglut.h>
 
 #include "settings.h"
 #include "gpu_funcs.h"
@@ -10,7 +15,7 @@
 #include "image_io.h"
 #include "util.h"
 #include "geometry.h"
-
+#include "display.h"
 void cleanup(void);
 void GpuCleanup(void);
 
@@ -25,6 +30,34 @@ gpuData_t gpuData;
 
 char filenameInput[] = "test.png";
 
+
+pthread_t computation_thread;
+pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+int main(int argc, char **argv) {
+	const int width = 512, height = 512;
+
+	// Initialize GLUT and GLEW
+	XInitThreads();
+	initGL(&argc, argv, width, height);
+
+	// Create computation thread
+	if (pthread_create(&computation_thread, NULL, computationThreadFunc, NULL) != 0) {
+		fprintf(stderr, "Error creating computation thread\n");
+		return 1;
+	}
+
+
+	// Start OpenGL main loop
+	glutMainLoop();
+
+	return 0;
+}
+
+
+
+/*
 int main(int argc, char* argv[]) {
 	int err;
 	int i, j;
@@ -197,7 +230,7 @@ int main(int argc, char* argv[]) {
 	printf("Finished\n");
 	return 0;
 }
-
+*/
 // Clean up CPU resources on exit
 void cleanup(void) {
 	printf("Cleaning up main...\n");
@@ -213,3 +246,4 @@ void GpuCleanup(void) {
 
 	GpuFreeBuffers(&gpuData);
 }
+

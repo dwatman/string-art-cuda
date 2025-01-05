@@ -12,7 +12,7 @@ OBJ_FILES += $(patsubst $(SRC_DIR)/%.cu, $(BUILD_DIR)/%.o, $(CUDA_SRC_FILES))
 
 # Common includes and paths
 INCLUDES   := -I.
-LIBS       := -lm -lpng
+LIBS       := -lm -lpng -lm -lGL -lglut -lGLU -lGLEW -lpthread -lX11
 CUDA_LIBS  :=
 C_FLAGS    := -pg
 CUDA_FLAGS := -gencode arch=compute_86,code=\"sm_86,compute_86\" # for RTX 3080Ti at home
