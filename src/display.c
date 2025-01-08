@@ -92,7 +92,7 @@ void initGL(int *argc, char **argv, int width, int height) {
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
 	glutInitWindowPosition(10, 10);
 	glutInitWindowSize(width, height);
-	window0 = glutCreateWindow("CUDA OpenGL Interop with pthreads");
+	window0 = glutCreateWindow("CUDA String Art Optimiser");
 	glewInit();
 
 	// Register GLUT callbacks

@@ -4,7 +4,6 @@
 #include <time.h> // to init rand()
 #include <math.h> // for abs
 #include <pthread.h>
-#include <unistd.h> // for usleep
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -143,6 +142,9 @@ void *computationThreadFunc(void *arg) {
 
 	printf("computationThreadFunc started\n");
 
+	srand(time(NULL));   // Initialise RNG
+	//srand(1234567);   // Initialise RNG to fixed seed for testing
+
 	// Set nail positions in a circle (for now)
 	InitNailPositions(nails, NUM_NAILS);
 
@@ -173,16 +175,11 @@ void *computationThreadFunc(void *arg) {
 	GpuUpdateWeights(&gpuData, h_weights);
 	InitWeightsTexture(&gpuData);
 
-
 	// Calculate the coverage of lines over pixels
 	CalcLineCoverage(h_lineCoverage, STRING_THICKNESS);
 
 	// Copy the coverage data to GPU memory
 	GpuUpdateCoverage(&gpuData, h_lineCoverage);
-
-
-	srand(time(NULL));   // Initialise RNG
-	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
@@ -193,7 +190,17 @@ void *computationThreadFunc(void *arg) {
 
 	bestError = 10000000.0;
 
-	for (i=0; i<3; i++) {
+	while (running) {
+		// Lock parameter access
+		pthread_mutex_lock(&param_mutex);
+		if (parameters.update_needed) {
+			local_param = parameters.some_parameter;
+			parameters.update_needed = 0;
+		}
+		pthread_mutex_unlock(&param_mutex);
+
+		// Run optimisation
+
 		// Start with the best result
 		memcpy(pointList, bestPoints, (NUM_LINES+1)*sizeof(int));
 		memcpy(&lines, &bestLines, sizeof(lineArray_t));
@@ -206,7 +213,6 @@ void *computationThreadFunc(void *arg) {
 			MovePattern(connections, &lines, pointList, nails, maxDist);
 		}
 
-
 		// Copy line data to GPU memory
 		GpuLoadLines(&gpuData, &lines);
 
@@ -215,14 +221,14 @@ void *computationThreadFunc(void *arg) {
 
 		// Compute error between original and generated images
 		imageError = GpucalculateImageError(&gpuData);
-		printf("#%i imageError: %f", i, imageError);
+		//printf("#%i imageError: %f", i, imageError);
 
 		totalLength = CalcTotalLength(pointList, nails);
-		printf("  length  %5.1f", totalLength);
+		//printf("  length  %5.1f", totalLength);
 
 		// Divide error by total line length to reduce bias for short connections
 		imageError /= totalLength;
-		printf("  (%f)", imageError);
+		//printf("  (%f)", imageError);
 
 		if (imageError < bestError) {
 			bestError = imageError;
@@ -232,31 +238,20 @@ void *computationThreadFunc(void *arg) {
 			memcpy(&bestLines, &lines, sizeof(lineArray_t));
 			memcpy(bestConnections, connections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
-			printf("  (best)");
+			//printf("  (best)");
 		}
-		printf("\n");
+		//printf("\n");
 		CUDA_CHECK(cudaDeviceSynchronize());
-	}
-
-	while (running) {
-		// Lock parameter access
-		pthread_mutex_lock(&param_mutex);
-		if (parameters.update_needed) {
-			local_param = parameters.some_parameter;
-			parameters.update_needed = 0;
-		}
-		pthread_mutex_unlock(&param_mutex);
-
-		// Run the CUDA kernel
 
 		// Update the image for display at the display rate
 		if (update_image) {
 			update_image = 0;
+			printf("#%i imageError: %f", i, imageError);
+			printf("  length  %5.1f", totalLength);
+			printf("  (%f)", imageError);
+			printf("\n");
 			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
 		}
-
-		// Yield to other threads
-		usleep(10000); // Small delay to avoid 100% CPU usage
 	}
 
 	printf("bestError: %f\n", bestError);
