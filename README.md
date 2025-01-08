@@ -6,7 +6,11 @@ String art generator using simulated annealing. GPU accelerated using CUDA.
 * NVIDIA GPU
 * Linux install, or VM with GPU access
 * Installed NVIDIA CUDA Toolkit
-* libpng-dev (install: `apt install libpng-dev`)
+* libpng-dev (for image loading/saving)
+* freeglut (OpenGL Utility Toolkit)
+* GLEW (OpenGL Extension Wrangler Library)
+
+Install: `sudo apt install libpng-dev freeglut3-dev libglew-dev`
 
 
 ## Project Description ##
@@ -73,7 +77,7 @@ The project is in a very early stage - more information will be added as develop
 - [x] Basic drawing of many lines on GPU
 - [x] Efficient drawing of many lines on GPU
 - [x] GPU accelerated fitness function calculation
-- [ ] Speed optimisation of fitness function (GPU)
+- [x] Speed optimisation of fitness function (GPU)
 - [ ] Simulated annealing algorithm implementation (CPU)
 - [ ] Tuning of simulated annealing algorithm
 - [ ] Importance map to prioritise areas of the image

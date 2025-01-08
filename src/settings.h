@@ -29,4 +29,7 @@
 // Output size (square for now)
 #define DATA_SIZE 512
 
+// OpenGL window refresh rate (ms)
+#define REFRESH_DELAY 1/10.0
+
 #endif
