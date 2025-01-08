@@ -2,7 +2,6 @@
 #include <GL/freeglut.h>
 
 #include <stdio.h>
-#include <stdbool.h>
 #include <pthread.h>
 
 #include "settings.h"
@@ -16,7 +15,8 @@ GLuint texid0=0;
 int window0=0;
 
 extern SharedParameters_t parameters;
-extern volatile bool running;
+extern volatile uint8_t running;
+extern volatile uint8_t update_image;
 
 extern pthread_t computation_thread;
 extern pthread_mutex_t param_mutex;
@@ -52,6 +52,9 @@ void timerEvent(int value) {
 	// Draw windows
 	glutSetWindow(window0);	glutPostRedisplay();
 
+	// Request copy of image from GPU for next display event
+	update_image = 1;
+
 	glutTimerFunc(REFRESH_DELAY, timerEvent, 0);
 }
 
@@ -60,10 +63,10 @@ void keyboard(unsigned char key, int x, int y) {
 	pthread_mutex_lock(&param_mutex);
 	if (key == 'a') {
 		parameters.some_parameter += 0.1f;  // Example modification
-		parameters.update_needed = true;
+		parameters.update_needed = 1;
 	} else if (key == 'd') {
 		parameters.some_parameter -= 0.1f;  // Example modification
-		parameters.update_needed = true;
+		parameters.update_needed = 1;
 	}
 	pthread_mutex_unlock(&param_mutex);
 	printf("Parameter updated: %f\n", parameters.some_parameter);
@@ -73,7 +76,7 @@ void keyboard(unsigned char key, int x, int y) {
 void GlCleanup() {
 	printf("GlCleanup start\n");
 
-	running = false;
+	running = 0;
 	pthread_join(computation_thread, NULL);
 
 	glDeleteTextures(1, &texid0);

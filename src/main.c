@@ -3,7 +3,6 @@
 #include <string.h> // for memset
 #include <time.h> // to init rand()
 #include <math.h> // for abs
-#include <stdbool.h>
 #include <pthread.h>
 #include <unistd.h> // for usleep
 
@@ -34,8 +33,9 @@ gpuData_t gpuData;
 char filenameInput[] = "test.png";
 int widthIn, heightIn;
 
-SharedParameters_t parameters = {0.0f, false};
-volatile bool running = true;
+SharedParameters_t parameters = {0.0f, 0};
+volatile uint8_t running = 1;
+volatile uint8_t update_image = 0;
 
 pthread_t computation_thread;
 pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -187,7 +187,7 @@ void *computationThreadFunc(void *arg) {
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
 	if (err) {
-		running = false; // Indicate failure to the main thread
+		running = 0; // Indicate failure to the main thread
 		return NULL;
 	}
 
@@ -226,7 +226,6 @@ void *computationThreadFunc(void *arg) {
 
 		if (imageError < bestError) {
 			bestError = imageError;
-			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
 
 			// Update best pattern
 			memcpy(bestPoints, pointList, (NUM_LINES+1)*sizeof(int));
@@ -244,12 +243,17 @@ void *computationThreadFunc(void *arg) {
 		pthread_mutex_lock(&param_mutex);
 		if (parameters.update_needed) {
 			local_param = parameters.some_parameter;
-			parameters.update_needed = false;
+			parameters.update_needed = 0;
 		}
 		pthread_mutex_unlock(&param_mutex);
 
 		// Run the CUDA kernel
 
+		// Update the image for display at the display rate
+		if (update_image) {
+			update_image = 0;
+			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
+		}
 
 		// Yield to other threads
 		usleep(10000); // Small delay to avoid 100% CPU usage
