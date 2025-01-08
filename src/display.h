@@ -17,7 +17,6 @@ extern "C" {
 
 //void GpuOutConvert(uint8_t *hostDst, gpuData_t *gpuData);
 void initGL(int *argc, char **argv, int width, int height);
-void *computationThreadFunc(void *arg);
 
 #ifdef __cplusplus
 }

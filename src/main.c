@@ -3,7 +3,9 @@
 #include <string.h> // for memset
 #include <time.h> // to init rand()
 #include <math.h> // for abs
+#include <stdbool.h>
 #include <pthread.h>
+#include <unistd.h> // for usleep
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -18,6 +20,7 @@
 
 void CpuCleanup(void);
 void GpuCleanup(void);
+void *computationThreadFunc(void *arg);
 
 // CPU buffers
 uint8_t *h_imageIn = NULL;
@@ -29,27 +32,17 @@ float   *h_lineCoverage = NULL;
 gpuData_t gpuData;
 
 char filenameInput[] = "test.png";
+int widthIn, heightIn;
+
+SharedParameters_t parameters = {0.0f, false};
+volatile bool running = true;
 
 pthread_t computation_thread;
 pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int argc, char* argv[]) {
 	int err;
-	int i, j;
 	float lineRatio;
-	double imageError;
-
-	point_t nails[NUM_NAILS];
-	int pointList[NUM_LINES+1];
-	lineArray_t lines;
-	uint64_t connections[LINE_BIT_ARRAY_SIZE]; // Bit array to track which nails are connected by lines
-	double totalLength;
-
-	// Storage for best result
-	int bestPoints[NUM_LINES+1];
-	lineArray_t bestLines;
-	uint64_t bestConnections[LINE_BIT_ARRAY_SIZE];
-	double bestError;
 
 	printf("Start\n");
 
@@ -74,7 +67,6 @@ int main(int argc, char* argv[]) {
 
 	printf("MAX_DIST: %f\n", MAX_DIST);
 
-	int widthIn, heightIn;
 	// Load input image
 	err = load_greyscale_png(filenameInput, &h_imageIn, &widthIn, &heightIn);
 	if (err == 0) {
@@ -96,6 +88,61 @@ int main(int argc, char* argv[]) {
 	InitPinnedBuffers(&gpuData);
 
 
+	// Initialize GLUT and GLEW
+	initGL(&argc, argv, 512, 512);
+
+	// Create computation thread
+	if (pthread_create(&computation_thread, NULL, computationThreadFunc, NULL) != 0) {
+		printf("ERROR: Could not create computation thread\n");
+		return -3;
+	}
+
+	// Start OpenGL main loop
+	glutMainLoop();
+
+	printf("Finished\n");
+	return 0;
+}
+
+// Clean up CPU resources on exit
+void CpuCleanup(void) {
+	printf("CpuCleanup\n");
+
+	FreePinnedBuffers();
+
+	printf("CpuCleanup done\n");
+}
+
+// Clean up GPU resources on exit
+void GpuCleanup(void) {
+	printf("GpuCleanup\n");
+
+	GpuFreeBuffers(&gpuData);
+
+	printf("GpuCleanup done\n");
+}
+
+// CUDA computation thread function
+void *computationThreadFunc(void *arg) {
+	int err;
+	float local_param = 0.0f;
+	int i, j;
+
+	point_t nails[NUM_NAILS];
+	int pointList[NUM_LINES+1];
+	lineArray_t lines;
+	uint64_t connections[LINE_BIT_ARRAY_SIZE]; // Bit array to track which nails are connected by lines
+	double totalLength;
+	double imageError;
+
+	// Storage for best result
+	int bestPoints[NUM_LINES+1];
+	lineArray_t bestLines;
+	uint64_t bestConnections[LINE_BIT_ARRAY_SIZE];
+	double bestError;
+
+	printf("computationThreadFunc started\n");
+
 	// Set nail positions in a circle (for now)
 	InitNailPositions(nails, NUM_NAILS);
 
@@ -105,7 +152,7 @@ int main(int argc, char* argv[]) {
 
 	// Create a mask, not pinned (TODO: optionally load from image)
 	// check cleanup order
-	h_weights = malloc(widthIn*heightIn*sizeof(uint8_t));
+	h_weights = (uint8_t *)malloc(widthIn*heightIn*sizeof(uint8_t));
 
 	// Fill the weights with maximum value as there is no image
 	memset(h_weights, 255, widthIn*heightIn*sizeof(uint8_t));
@@ -139,8 +186,10 @@ int main(int argc, char* argv[]) {
 
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
-	if (err) return -3;
-
+	if (err) {
+		running = false; // Indicate failure to the main thread
+		return NULL;
+	}
 
 	bestError = 10000000.0;
 
@@ -189,6 +238,23 @@ int main(int argc, char* argv[]) {
 		printf("\n");
 		CUDA_CHECK(cudaDeviceSynchronize());
 	}
+
+	while (running) {
+		// Lock parameter access
+		pthread_mutex_lock(&param_mutex);
+		if (parameters.update_needed) {
+			local_param = parameters.some_parameter;
+			parameters.update_needed = false;
+		}
+		pthread_mutex_unlock(&param_mutex);
+
+		// Run the CUDA kernel
+
+
+		// Yield to other threads
+		usleep(10000); // Small delay to avoid 100% CPU usage
+	}
+
 	printf("bestError: %f\n", bestError);
 
 	// Clear areas outside the border of nails
@@ -202,36 +268,7 @@ int main(int argc, char* argv[]) {
 	// Write image data to disk
 	write_png("out.png", h_imageOut, DATA_SIZE, DATA_SIZE, 8);
 
-	// Initialize GLUT and GLEW
-	initGL(&argc, argv, 512, 512);
+	printf("computationThreadFunc stopped\n");
 
-	// Create computation thread
-	if (pthread_create(&computation_thread, NULL, computationThreadFunc, NULL) != 0) {
-		fprintf(stderr, "Error creating computation thread\n");
-		return 1;
-	}
-
-	// Start OpenGL main loop
-	glutMainLoop();
-
-	printf("Finished\n");
-	return 0;
-}
-
-// Clean up CPU resources on exit
-void CpuCleanup(void) {
-	printf("CpuCleanup\n");
-
-	FreePinnedBuffers();
-
-	printf("CpuCleanup done\n");
-}
-
-// Clean up GPU resources on exit
-void GpuCleanup(void) {
-	printf("GpuCleanup\n");
-
-	GpuFreeBuffers(&gpuData);
-
-	printf("GpuCleanup done\n");
+	return NULL;
 }

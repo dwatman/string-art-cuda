@@ -3,19 +3,20 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include <unistd.h> // for usleep
 #include <pthread.h>
 
 #include "settings.h"
-//#include "gpu_funcs.h"
-//#include "gpu_util.h"
+#include "geometry.h"
+#include "gpu_funcs.h"
+#include "gpu_util.h"
 #include "display.h"
+#include "image_io.h"
 
 GLuint texid0=0;
 int window0=0;
 
-SharedParameters_t parameters = {0.0f, false};
-volatile bool running = true;
+extern SharedParameters_t parameters;
+extern volatile bool running;
 
 extern pthread_t computation_thread;
 extern pthread_mutex_t param_mutex;
@@ -103,42 +104,4 @@ void initGL(int *argc, char **argv, int width, int height) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 	glutTimerFunc(REFRESH_DELAY, timerEvent, 0);
-}
-
-// CUDA kernel to simulate optimization work
-__global__ void optimizationKernel(uchar4 *data, int width, int height, float param) {
-	int x = threadIdx.x + blockIdx.x * blockDim.x;
-	int y = threadIdx.y + blockIdx.y * blockDim.y;
-	if (x < width && y < height) {
-		int idx = y * width + x;
-		data[idx] = make_uchar4((x + (int)(param * 10)) % 256, y % 256, 128, 255);
-	}
-}
-
-// CUDA computation thread function
-void *computationThreadFunc(void *arg) {
-	cudaError_t err;
-	float local_param = 0.0f;
-
-	printf("computationThreadFunc started\n");
-
-	while (running) {
-		// Lock parameter access
-		pthread_mutex_lock(&param_mutex);
-		if (parameters.update_needed) {
-			local_param = parameters.some_parameter;
-			parameters.update_needed = false;
-		}
-		pthread_mutex_unlock(&param_mutex);
-
-		// Run the CUDA kernel
-
-
-		// Yield to other threads
-		usleep(10000); // Small delay to avoid 100% CPU usage
-	}
-
-	printf("computationThreadFunc stopped\n");
-
-	return NULL;
 }
