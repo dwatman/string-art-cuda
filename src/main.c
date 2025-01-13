@@ -43,6 +43,11 @@ int main(int argc, char* argv[]) {
 	int err;
 	float lineRatio;
 
+	// Set initial parameter values
+	parameters.linesToMove = sqrt(NUM_LINES)/4;
+	parameters.maxMoveDist = NUM_NAILS/2;
+	parameters.update_needed = 1;
+
 	printf("Start\n");
 
 	// Initialise GPU device and buffers
@@ -124,8 +129,11 @@ void GpuCleanup(void) {
 // CUDA computation thread function
 void *computationThreadFunc(void *arg) {
 	int err;
-	float local_param = 0.0f;
 	int i, j;
+
+	// Local copies of the parameters
+	int moveLines;
+	int maxDist;
 
 	point_t nails[NUM_NAILS];
 	int pointList[NUM_LINES+1];
@@ -194,7 +202,8 @@ void *computationThreadFunc(void *arg) {
 		// Lock parameter access
 		pthread_mutex_lock(&param_mutex);
 		if (parameters.update_needed) {
-			local_param = parameters.some_parameter;
+			moveLines = parameters.linesToMove;
+			maxDist = parameters.maxMoveDist;
 			parameters.update_needed = 0;
 		}
 		pthread_mutex_unlock(&param_mutex);
@@ -207,9 +216,7 @@ void *computationThreadFunc(void *arg) {
 		memcpy(connections, bestConnections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
 		// Move some points around
-		int moveLines = NUM_LINES/100;
-		int maxDist = NUM_NAILS/3;
-		for (j=0; j<10; j++) {
+		for (j=0; j<moveLines; j++) {
 			MovePattern(connections, &lines, pointList, nails, maxDist);
 		}
 
@@ -246,10 +253,10 @@ void *computationThreadFunc(void *arg) {
 		// Update the image for display at the display rate
 		if (update_image) {
 			update_image = 0;
-			printf("#%i imageError: %f", i, imageError);
-			printf("  length  %5.1f", totalLength);
-			printf("  (%f)", imageError);
-			printf("\n");
+			// printf("#%i imageError: %f", i, imageError);
+			// printf("  length  %5.1f", totalLength);
+			// printf("  (%f)", imageError);
+			// printf("\n");
 			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
 		}
 	}

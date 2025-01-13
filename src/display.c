@@ -62,14 +62,22 @@ void timerEvent(int value) {
 void keyboard(unsigned char key, int x, int y) {
 	pthread_mutex_lock(&param_mutex);
 	if (key == 'a') {
-		parameters.some_parameter += 0.1f;  // Example modification
+		if (parameters.linesToMove > 1) parameters.linesToMove -= 1;
 		parameters.update_needed = 1;
 	} else if (key == 'd') {
-		parameters.some_parameter -= 0.1f;  // Example modification
+		parameters.linesToMove += 1;
 		parameters.update_needed = 1;
 	}
+	if (key == 'z') {
+		if (parameters.maxMoveDist > 1) parameters.maxMoveDist -= 1;
+		parameters.update_needed = 1;
+	} else if (key == 'c') {
+		parameters.maxMoveDist += 1;
+		parameters.update_needed = 1;
+	}
+
 	pthread_mutex_unlock(&param_mutex);
-	printf("Parameter updated: %f\n", parameters.some_parameter);
+	printf("linesToMove: %i  maxMoveDist: %i\n", parameters.linesToMove, parameters.maxMoveDist);
 }
 
 // Cleanup function
