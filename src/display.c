@@ -62,10 +62,12 @@ void timerEvent(int value) {
 void keyboard(unsigned char key, int x, int y) {
 	pthread_mutex_lock(&param_mutex);
 	if (key == 'a') {
-		if (parameters.linesToMove > 1) parameters.linesToMove -= 1;
+		parameters.acceptThresh *= 0.9;
+		if (parameters.acceptThresh < 0.0) parameters.acceptThresh = 0.0;
 		parameters.update_needed = 1;
 	} else if (key == 'd') {
-		parameters.linesToMove += 1;
+		parameters.acceptThresh /= 0.9;
+		if (parameters.acceptThresh > 1.0) parameters.acceptThresh = 1.0;
 		parameters.update_needed = 1;
 	}
 	if (key == 'z') {
@@ -77,7 +79,7 @@ void keyboard(unsigned char key, int x, int y) {
 	}
 
 	pthread_mutex_unlock(&param_mutex);
-	printf("linesToMove: %i  maxMoveDist: %i\n", parameters.linesToMove, parameters.maxMoveDist);
+	printf("acceptThresh: %f  maxMoveDist: %i\n", parameters.acceptThresh, parameters.maxMoveDist);
 }
 
 // Cleanup function

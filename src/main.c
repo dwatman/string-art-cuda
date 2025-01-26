@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 	float lineRatio;
 
 	// Set initial parameter values
-	parameters.linesToMove = sqrt(NUM_LINES)/4;
+	parameters.acceptThresh = 0.1;
 	parameters.maxMoveDist = NUM_NAILS/2;
 	parameters.update_needed = 1;
 
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
 
 
 	// Initialize GLUT and GLEW
-	initGL(&argc, argv, 512, 512);
+	initGL(&argc, argv, 512*2, 512*2);
 
 	// Create computation thread
 	if (pthread_create(&computation_thread, NULL, computationThreadFunc, NULL) != 0) {
@@ -132,14 +132,16 @@ void *computationThreadFunc(void *arg) {
 	int i, j;
 
 	// Local copies of the parameters
-	int moveLines;
+	float tempThresh;
 	int maxDist;
 
 	point_t nails[NUM_NAILS];
+	double totalLength;
+
+	// Current result
 	int pointList[NUM_LINES+1];
 	lineArray_t lines;
 	uint64_t connections[LINE_BIT_ARRAY_SIZE]; // Bit array to track which nails are connected by lines
-	double totalLength;
 	double imageError;
 
 	// Storage for best result
@@ -202,7 +204,7 @@ void *computationThreadFunc(void *arg) {
 		// Lock parameter access
 		pthread_mutex_lock(&param_mutex);
 		if (parameters.update_needed) {
-			moveLines = parameters.linesToMove;
+			tempThresh = parameters.acceptThresh;
 			maxDist = parameters.maxMoveDist;
 			parameters.update_needed = 0;
 		}
@@ -215,10 +217,8 @@ void *computationThreadFunc(void *arg) {
 		memcpy(&lines, &bestLines, sizeof(lineArray_t));
 		memcpy(connections, bestConnections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
-		// Move some points around
-		for (j=0; j<moveLines; j++) {
-			MovePattern(connections, &lines, pointList, nails, maxDist);
-		}
+		// Move a point
+		MovePattern(connections, &lines, pointList, nails, maxDist);
 
 		// Copy line data to GPU memory
 		GpuLoadLines(&gpuData, &lines);
@@ -237,7 +237,12 @@ void *computationThreadFunc(void *arg) {
 		imageError /= totalLength;
 		//printf("  (%f)", imageError);
 
-		if (imageError < bestError) {
+		//printf("err: %f  dErr: %+f\n", imageError, bestError-imageError);
+		float randVal = (double)rand()/(double)RAND_MAX;
+
+		// Accept the new candidate if the error improves, or if the random value is below the temperature threshold
+		// We don't have a good idea of the scale of errors so can't base the threshold on error or error change
+		if ((imageError < bestError) || (randVal < tempThresh)) {
 			bestError = imageError;
 
 			// Update best pattern

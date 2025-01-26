@@ -6,7 +6,7 @@
 
 // Shared parameters structure
 typedef struct {
-	int linesToMove;
+	float acceptThresh;
 	int maxMoveDist;
 	uint8_t update_needed;    // Flag to indicate if parameters were updated
 } SharedParameters_t;
