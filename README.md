@@ -10,7 +10,7 @@ String art generator using simulated annealing. GPU accelerated using CUDA.
 * freeglut (OpenGL Utility Toolkit)
 * GLEW (OpenGL Extension Wrangler Library)
 
-Install: `sudo apt install libpng-dev freeglut3-dev libglew-dev`
+Install dependencies: `sudo apt install libpng-dev freeglut3-dev libglew-dev`
 
 
 ## Project Description ##
@@ -66,7 +66,7 @@ The difficulty with optimising the whole image is that it requires calculating a
 
 The approach will be to generate sequences of string connections on the CPU, using simulated annealing to optimise the sequence. The fitness function calculation will run on the GPU, comparing the target image to the lines created by the proposed list of connections.
 
-The project is in a very early stage - more information will be added as development progresses.
+The project is in an early stage - more information will be added as development progresses.
 
 ## Progress ##
 
@@ -78,7 +78,7 @@ The project is in a very early stage - more information will be added as develop
 - [x] Efficient drawing of many lines on GPU
 - [x] GPU accelerated fitness function calculation
 - [x] Speed optimisation of fitness function (GPU)
-- [ ] Simulated annealing algorithm implementation (CPU)
+- [x] Basic simulated annealing algorithm implementation (CPU)
 - [ ] Tuning of simulated annealing algorithm
 - [ ] Importance map to prioritise areas of the image
 - [ ] Multi-scale optimisation?
@@ -90,15 +90,15 @@ The project is in a very early stage - more information will be added as develop
 ## Limitations ##
 
 * Currently the nail positions are fixed in a circle (will be changed later)
-* It's going to be slow (no idea how slow until basic full functionality is done)
-* No useful output until the optimisation stage is working
+* Number of nails and lines must be set manually (optimal line count must be guessed at)
 
-## Performance Tests ##
+## Performance Tests and Optimisation ##
 
 NVIDIA GeForce RTX 3080 Ti
 
-300 nails
+300 nails (circle layout)
 5000 lines
+0.25 string thickness
 512x512 output image
 
 DrawLine_kernel (GPU) duration (99.8% of the run time)
