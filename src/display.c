@@ -61,25 +61,35 @@ void timerEvent(int value) {
 // OpenGL keyboard callback to update parameters
 void keyboard(unsigned char key, int x, int y) {
 	pthread_mutex_lock(&param_mutex);
-	if (key == 'a') {
+	switch (key) {
+	case 'a':
 		parameters.acceptThresh *= 0.9;
 		if (parameters.acceptThresh < 0.0) parameters.acceptThresh = 0.0;
-		parameters.update_needed = 1;
-	} else if (key == 'd') {
+		break;
+	case 'd':
 		parameters.acceptThresh /= 0.9;
 		if (parameters.acceptThresh > 1.0) parameters.acceptThresh = 1.0;
-		parameters.update_needed = 1;
-	}
-	if (key == 'z') {
+		break;
+	case 'z':
 		if (parameters.maxMoveDist > 1) parameters.maxMoveDist -= 1;
-		parameters.update_needed = 1;
-	} else if (key == 'c') {
-		parameters.maxMoveDist += 1;
-		parameters.update_needed = 1;
+		break;
+	case 'c':
+		if (parameters.maxMoveDist < NUM_NAILS/2) parameters.maxMoveDist += 1;
+		break;
+	case 'e':
+		parameters.auto_mode ^= 1;
+		break;
+	case 'q':
+		running = 0;
+		exit(0);
+		break;
+	default:
+		break;
 	}
+	parameters.update_needed = 1;
 
 	pthread_mutex_unlock(&param_mutex);
-	printf("acceptThresh: %f  maxMoveDist: %i\n", parameters.acceptThresh, parameters.maxMoveDist);
+	printf("auto: %u  acceptThresh: %f  maxMoveDist: %i\n", parameters.auto_mode, parameters.acceptThresh, parameters.maxMoveDist);
 }
 
 // Cleanup function

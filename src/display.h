@@ -8,7 +8,8 @@
 typedef struct {
 	float acceptThresh;
 	int maxMoveDist;
-	uint8_t update_needed;    // Flag to indicate if parameters were updated
+	uint8_t auto_mode;		// Flag to indicate if "cooling" is being adjusted automatically
+	uint8_t update_needed;	// Flag to indicate if parameters were updated
 } SharedParameters_t;
 
 // Fix to support both C and C++ compilers

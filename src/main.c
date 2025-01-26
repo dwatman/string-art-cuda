@@ -44,8 +44,9 @@ int main(int argc, char* argv[]) {
 	float lineRatio;
 
 	// Set initial parameter values
-	parameters.acceptThresh = 0.1;
+	parameters.acceptThresh = 0.2;
 	parameters.maxMoveDist = NUM_NAILS/2;
+	parameters.auto_mode = 1;
 	parameters.update_needed = 1;
 
 	printf("Start\n");
@@ -130,10 +131,13 @@ void GpuCleanup(void) {
 void *computationThreadFunc(void *arg) {
 	int err;
 	int i, j;
+	int iterations = 0;
+	double prevError, deltaError;
 
 	// Local copies of the parameters
 	float tempThresh;
 	int maxDist;
+	uint8_t autoMode;
 
 	point_t nails[NUM_NAILS];
 	double totalLength;
@@ -199,6 +203,7 @@ void *computationThreadFunc(void *arg) {
 	}
 
 	bestError = 10000000.0;
+	prevError = 0;
 
 	while (running) {
 		// Lock parameter access
@@ -206,6 +211,7 @@ void *computationThreadFunc(void *arg) {
 		if (parameters.update_needed) {
 			tempThresh = parameters.acceptThresh;
 			maxDist = parameters.maxMoveDist;
+			autoMode = parameters.auto_mode;
 			parameters.update_needed = 0;
 		}
 		pthread_mutex_unlock(&param_mutex);
@@ -251,18 +257,44 @@ void *computationThreadFunc(void *arg) {
 			memcpy(bestConnections, connections, LINE_BIT_ARRAY_SIZE*sizeof(uint64_t));
 
 			//printf("  (best)");
-		}
-		//printf("\n");
-		CUDA_CHECK(cudaDeviceSynchronize());
 
-		// Update the image for display at the display rate
-		if (update_image) {
-			update_image = 0;
-			// printf("#%i imageError: %f", i, imageError);
-			// printf("  length  %5.1f", totalLength);
-			// printf("  (%f)", imageError);
-			// printf("\n");
-			GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
+			//printf("\n");
+			CUDA_CHECK(cudaDeviceSynchronize());
+
+			// Update the image for display at or less than the display rate
+			if (update_image) {
+				update_image = 0;
+				// printf("#%i imageError: %f", i, imageError);
+				// printf("  length  %5.1f", totalLength);
+				// printf("  (%f)", imageError);
+				// printf("\n");
+				GpuOutConvert(h_imageOut, &gpuData);// Convert the image to uint and write to CPU buffer
+			}
+		}
+
+		// Update annealing parameters if in auto mode
+		if ((autoMode) && (iterations % 1000 == 0)) {
+			// Stop accepting any worse results after a certain time
+			if (tempThresh > 0.00001)
+				tempThresh *= 0.95;
+			else
+				tempThresh = 0.0;
+
+			// Decrease maxDist at a lower rate
+			if ((maxDist > 10) && (iterations % 3000 == 0)) maxDist -= 1;
+
+			pthread_mutex_lock(&param_mutex);
+			parameters.acceptThresh = tempThresh;
+			parameters.maxMoveDist = maxDist;
+			pthread_mutex_unlock(&param_mutex);
+			printf("auto: %u  acceptThresh: %f  maxMoveDist: %i\n", parameters.auto_mode, parameters.acceptThresh, parameters.maxMoveDist);
+		}
+
+		iterations++;
+		if (iterations % 1000 == 0) {
+			deltaError = bestError - prevError;
+			prevError = bestError;
+			printf("iteration %i  imageError: %.9f  deltaError: %+.9f\n", iterations, bestError, deltaError);
 		}
 	}
 
