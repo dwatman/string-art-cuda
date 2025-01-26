@@ -35,7 +35,8 @@ typedef struct {
 	float inv_denom[NUM_LINES];
 } lineArray_t;
 
-void InitNailPositions(point_t *nails, int numNails);
+int InitNailPositionsCircle(point_t *nails, int numNails);
+int InitNailPositionsSquare(point_t *nails, int numNails);
 int ValidateNextNail(int first, int next, int thresh, uint64_t *connections);
 lineParam_t PointsToLine(point_t p1, point_t p2);
 void CalcLineParams(lineArray_t *lines, const int *pointList, const point_t *nails, int pointIndex);

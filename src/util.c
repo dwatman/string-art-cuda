@@ -1,15 +1,16 @@
+#include <stdio.h>
 #include <stdint.h> // for uint64_t
 
 #include "util.h"
 #include "settings.h"
 
-// Initialise nail positions in a cirlce (for now)
-void InitNailPositions(point_t *nails, int numNails) {
+// Initialise nail positions in a cirlce
+int InitNailPositionsCircle(point_t *nails, int numNails) {
 	float x, y;
 	float angle;
 	int i;
 
-	// Arrange nails in a circle
+	// Place nails in a CCW circle, zero is at the middle-right position
 	for (i=0; i<numNails; i++) {
 		angle = i*2*M_PI/numNails;
 
@@ -19,6 +20,48 @@ void InitNailPositions(point_t *nails, int numNails) {
 		nails[i].x = x;
 		nails[i].y = y;
 	}
+
+	return 0;
+}
+
+// Initialise nail positions in a square
+int InitNailPositionsSquare(point_t *nails, int numNails) {
+	float x, y;
+	int nailsPerSide;
+	int i;
+
+	if (numNails % 4 != 0) {
+		printf("ERROR: Number of nails must be divisible by 4 for the square shape\n");
+		return 1;
+	}
+
+	nailsPerSide = numNails/4;
+
+	// Place left nails top to bottom
+	for (i=0; i<=nailsPerSide; i++) {
+		nails[i].x = 0.0;
+		nails[i].y = (i/(float)nailsPerSide) * (DATA_SIZE-1);
+	}
+
+	// Place bottom nails left to right
+	for (i=1; i<=nailsPerSide; i++) {
+		nails[i+nailsPerSide].x = (i/(float)nailsPerSide) * (DATA_SIZE-1);
+		nails[i+nailsPerSide].y = DATA_SIZE-1;
+	}
+
+	// Place right nails bottom to top
+	for (i = 1; i <= nailsPerSide; i++) {
+		nails[i + 2*nailsPerSide].x = DATA_SIZE - 1;
+		nails[i + 2*nailsPerSide].y = DATA_SIZE - 1 - (i / (float)nailsPerSide) * (DATA_SIZE - 1);
+	}
+
+	// Place top nails right to left
+	for (i = 1; i < nailsPerSide; i++) {
+		nails[i + 3*nailsPerSide].x = DATA_SIZE - 1 - (i / (float)nailsPerSide) * (DATA_SIZE - 1);
+		nails[i + 3*nailsPerSide].y = 0.0;
+	}
+
+	return 0;
 }
 
 // Check if the next proposed nail position is valid

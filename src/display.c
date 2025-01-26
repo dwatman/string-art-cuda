@@ -49,6 +49,11 @@ void display0(void) {
 }
 
 void timerEvent(int value) {
+	// Check if the compute thread has exited (when there is an error)
+	if (running != 1) {
+		exit(0);
+	}
+
 	// Draw windows
 	glutSetWindow(window0);	glutPostRedisplay();
 

@@ -159,11 +159,18 @@ void *computationThreadFunc(void *arg) {
 	srand(time(NULL));   // Initialise RNG
 	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
-	// Set nail positions in a circle (for now)
-	InitNailPositions(nails, NUM_NAILS);
+	// Set nail positions in a circle
+	//err = InitNailPositionsCircle(nails, NUM_NAILS);
+	// Set nail positions in a square
+	err = InitNailPositionsSquare(nails, NUM_NAILS);
+
+	if (err != 0) {
+		running = 0; // Indicate failure to the main thread
+		return NULL;
+	}
 
 	// for (i=0; i<NUM_NAILS; i++) {
-	// 	printf("Nail %2u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
+	// 	printf("Nail %3u: (%8.3f, %8.3f)\n", i, nails[i].x, nails[i].y);
 	// }
 
 	// Create a mask, not pinned (TODO: optionally load from image)
@@ -197,7 +204,7 @@ void *computationThreadFunc(void *arg) {
 
 	// Generate an initial random line pattern
 	err = GenerateRandomPattern(bestConnections, &bestLines, bestPoints, nails);
-	if (err) {
+	if (err != 0) {
 		running = 0; // Indicate failure to the main thread
 		return NULL;
 	}
