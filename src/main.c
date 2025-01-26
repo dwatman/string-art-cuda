@@ -159,10 +159,15 @@ void *computationThreadFunc(void *arg) {
 	srand(time(NULL));   // Initialise RNG
 	//srand(1234567);   // Initialise RNG to fixed seed for testing
 
-	// Set nail positions in a circle
-	//err = InitNailPositionsCircle(nails, NUM_NAILS);
-	// Set nail positions in a square
-	err = InitNailPositionsSquare(nails, NUM_NAILS);
+	// Initialise nail positions
+	if (SQUARE_SHAPE) {
+		// Set nail positions in a square
+		err = InitNailPositionsSquare(nails, NUM_NAILS);
+	}
+	else {
+		// Set nail positions in a circle
+		err = InitNailPositionsCircle(nails, NUM_NAILS);
+	}
 
 	if (err != 0) {
 		running = 0; // Indicate failure to the main thread

@@ -4,6 +4,7 @@
 // Nail and line counts
 #define NUM_NAILS 300
 #define NUM_LINES 2000
+#define SQUARE_SHAPE 1 // Round if 0, square if 1. NUM_NAILS must be divisible by 4 if square
 
 // String parameters
 #define STRING_THICKNESS 0.25f // Thickness of the string in pixels (float)

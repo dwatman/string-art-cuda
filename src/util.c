@@ -137,7 +137,7 @@ static inline int get_bit_index(int i, int j) {
 
 // Clear all recorded connections, and preset invalid links
 void ResetConnections(uint64_t *connections) {
-	int i;
+	int i, j;
 
 	// Clear all connections
 	for (i=0; i<LINE_BIT_ARRAY_SIZE; i++)
@@ -146,6 +146,18 @@ void ResetConnections(uint64_t *connections) {
 	// Set points as connected to themselves
 	for (i=0; i<NUM_NAILS; i++)
 		SetConnection(i, i, connections);
+
+	// Prevent lines flat along the sides if the shape is square
+	if (SQUARE_SHAPE) {
+		for (i=0; i<NUM_NAILS/4; i++) {
+			for (j=i+1; j<=NUM_NAILS/4; j++) {
+				SetConnection(i, j, connections);
+				SetConnection(i+NUM_NAILS/4, j+NUM_NAILS/4, connections);
+				SetConnection(i+NUM_NAILS/2, j+NUM_NAILS/2, connections);
+				SetConnection((i+NUM_NAILS*3/4)%NUM_NAILS, (j+NUM_NAILS*3/4)%NUM_NAILS, connections);
+			}
+		}
+	}
 }
 
 // Mark a connection (in both directions)
