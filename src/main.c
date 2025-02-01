@@ -5,6 +5,10 @@
 #include <math.h> // for abs
 #include <pthread.h>
 
+// For image sequence generation
+#include <sys/stat.h>   // For stat() and mkdir()
+#include <sys/types.h>  // For mode_t
+
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 
@@ -50,6 +54,28 @@ int main(int argc, char* argv[]) {
 	parameters.update_needed = 1;
 
 	printf("Start\n");
+
+	// Check for directory if video output is enabled
+	if (OUTPUT_VIDEO) {
+		struct stat st;
+		if (stat(VIDEO_DIR, &st) == -1) {
+			// stat() returns -1 if the file/directory doesn't exist.
+			// Attempt to create the directory.
+			if (mkdir(VIDEO_DIR, 0755) != 0) {
+				printf("ERROR: Could not create video directory \"%s\"", VIDEO_DIR);
+				exit(EXIT_FAILURE);
+			}
+			printf("Directory created: %s\n", VIDEO_DIR);
+		} else {
+			// Optionally, verify that it is indeed a directory.
+			if (S_ISDIR(st.st_mode)) {
+				printf("Directory already exists: %s (OK)\n", VIDEO_DIR);
+			} else {
+				printf("ERROR: %s exists but is not a directory\n", VIDEO_DIR);
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
 
 	// Initialise GPU device and buffers
 	GpuInit(); // Set up CUDA device
@@ -132,6 +158,8 @@ void *computationThreadFunc(void *arg) {
 	int err;
 	int i, j;
 	int iterations = 0;
+	int fileIndex = 0;
+	char fileName[256];
 	double prevError, deltaError;
 
 	// Local copies of the parameters
@@ -307,6 +335,25 @@ void *computationThreadFunc(void *arg) {
 			deltaError = bestError - prevError;
 			prevError = bestError;
 			printf("iteration %i  imageError: %.9f  deltaError: %+.9f\n", iterations, bestError, deltaError);
+		}
+
+		// Output files for creating a video if enabled
+		if ((OUTPUT_VIDEO) && (iterations % 500 == 0)) {
+			sprintf(fileName, "./%s/%s%04i.png", VIDEO_DIR, VIDEO_FILENAME, fileIndex);
+			printf("writing %s\n", fileName);
+
+			// Clear areas outside the border of nails
+			for (j=0; j<DATA_SIZE; j++) {
+				for (i=0; i<DATA_SIZE; i++) {
+					if (inside_poly(nails, NUM_NAILS, i, j) == 0)
+						h_imageOut[j*DATA_SIZE + i] = 128;
+				}
+			}
+
+			// Write image data to disk
+			write_png(fileName, h_imageOut, DATA_SIZE, DATA_SIZE, 8);
+
+			fileIndex++;
 		}
 	}
 
