@@ -2,3 +2,4 @@ build/*
 string-gen
 *.png
 *.gif
+*.mp4
